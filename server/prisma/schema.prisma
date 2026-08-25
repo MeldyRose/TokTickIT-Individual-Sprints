@@ -10,9 +10,80 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model RequesterUser {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tickets   Ticket[]
+}
 
 model Category {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  tickets     Ticket[]
+}
+
+model RelatedSystem {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  tickets     Ticket[]
+}
+
+model Ticket {
+  id                String        @id @default(cuid())
+  ticketNumber      String        @unique
+  summary           String
+  description       String?
+  categoryId        String
+  category          Category      @relation(fields: [categoryId], references: [id])
+  relatedSystemId   String
+  relatedSystem     RelatedSystem @relation(fields: [relatedSystemId], references: [id])
+  requestedPriority Priority      @default(MEDIUM)
+  itPriority        Priority      @default(MEDIUM)
+  currentStatus     TicketStatus  @default(NEW)
+  requesterId       String
+  requester         RequesterUser @relation(fields: [requesterId], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  attachments       Attachment[]
+
+  @@index([requesterId])
+  @@index([createdAt])
+}
+
+model Attachment {
+  id            String    @id @default(cuid())
+  ticketId      String
+  ticket        Ticket    @relation(fields: [ticketId], references: [id])
+  fileName      String
+  fileSize      Int
+  mimeType      String
+  filePath      String
+  uploadedAt    DateTime  @default(now())
+  deletedAt     DateTime?
+  removalReason String?
+
+  @@index([ticketId])
+  @@index([deletedAt])
 }

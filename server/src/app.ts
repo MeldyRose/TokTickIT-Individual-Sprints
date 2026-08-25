@@ -16,12 +16,15 @@ app.get("/api/health", (_req: Request, res: Response) => {
 app.get("/api/categories", async (_req: Request, res: Response) => {
   try {
     const categories = await getPrisma().category.findMany({
-      orderBy: { id: "asc" },
+      where: { isActive: true },
       select: {
         id: true,
         name: true,
+        description: true,
       },
     });
+    const order = ["Account and Access", "Hardware", "Software", "Network"];
+    categories.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
     res.status(200).json(categories);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch categories" });
