@@ -12,10 +12,10 @@ describe("App", () => {
 
   it("shows Online and the seeded categories on success", async () => {
     const mockCategories = [
-      { id: 1, name: "Account and Access" },
-      { id: 2, name: "Hardware" },
-      { id: 3, name: "Software" },
-      { id: 4, name: "Network" },
+      { id: "cat-acc-001", name: "Account and Access" },
+      { id: "cat-hwd-002", name: "Hardware" },
+      { id: "cat-sfw-003", name: "Software" },
+      { id: "cat-net-004", name: "Network" },
     ];
     vi.spyOn(api, "checkSystem").mockResolvedValueOnce({
       online: true,
