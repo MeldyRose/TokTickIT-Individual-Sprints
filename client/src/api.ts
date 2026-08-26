@@ -186,6 +186,22 @@ export async function fetchMyTickets(
 
   if (!res.ok) {
     throw new Error("Failed to fetch tickets");
+export interface RequesterUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export async function fetchRequesters(): Promise<RequesterUser[]> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api/requesters`);
+  } catch {
+    throw new Error("Unable to connect to TokTickIT API");
+  }
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch active requesters");
   }
 
   return res.json();
