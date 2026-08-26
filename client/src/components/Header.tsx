@@ -7,12 +7,14 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ activeTab, onTabChange }) => {
+export const Header: React.FC = () => {
   const { activeRequester, clearRequester } = useRequester();
 
   return (
     <header style={{ backgroundColor: "#006B3C", color: "#FFFFFF" }} className="py-3 px-4 shadow-sm mb-4">
       <div className="container-fluid d-flex flex-wrap align-items-center justify-content-between">
         <div className="d-flex align-items-center me-4">
+        <div className="d-flex align-items-center me-3">
           <span className="h4 mb-0 fw-bold tracking-tight text-white me-2">TokTickIT</span>
           <span className="badge bg-light text-success fw-semibold">IT Service Desk</span>
         </div>

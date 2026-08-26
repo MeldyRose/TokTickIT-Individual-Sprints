@@ -15,6 +15,9 @@ export const RequesterSelection: React.FC = () => {
     try {
       const data = await fetchRequesters();
       setRequesters(data);
+      if (data.length > 0) {
+        setSelectedId(data[0].id);
+      }
     } catch (err: any) {
       setError(err?.message || "Unable to load Development Requesters");
     } finally {
