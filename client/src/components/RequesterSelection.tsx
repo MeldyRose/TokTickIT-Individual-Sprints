@@ -96,6 +96,9 @@ export const RequesterSelection: React.FC = () => {
                   data-testid="requester-select-dropdown"
                   style={{ height: 44 }}
                 >
+                  <option value="" disabled>
+                    -- Select a Development Requester --
+                  </option>
                   {requesters.map((req) => (
                     <option key={req.id} value={req.id}>
                       {req.name} ({req.email})

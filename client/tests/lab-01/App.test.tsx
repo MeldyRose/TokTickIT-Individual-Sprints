@@ -5,10 +5,15 @@ import * as api from "../../src/api";
 
 describe("App", () => {
   beforeEach(() => {
+    localStorage.clear();
     localStorage.setItem(
       "toktickit_active_requester",
       JSON.stringify({ id: "req-user-001", name: "Jennifer Anderson", email: "jennifer.a@example.com" })
     );
+    vi.spyOn(api, "fetchMyTickets").mockResolvedValue({
+      data: [],
+      pagination: { page: 1, limit: 10, totalItems: 0, totalPages: 1 },
+    });
   });
 
   it("renders the TokTickIT heading", () => {

@@ -1,3 +1,4 @@
+import React, { createContext, useContext, useState } from "react";
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { RequesterUser } from "../api";
 
@@ -26,6 +27,7 @@ export const RequesterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(requester));
     } catch {
+      // ignore
       // ignore storage errors
     }
   };
@@ -35,6 +37,7 @@ export const RequesterProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
+      // ignore
       // ignore storage errors
     }
   };
