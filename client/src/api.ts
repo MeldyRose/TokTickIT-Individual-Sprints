@@ -56,6 +56,33 @@ export interface TicketListResponse {
   };
 }
 
+export interface AttachmentMetadata {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedAt: string;
+}
+
+export interface TicketDetail {
+  id: string;
+  ticketNumber: string;
+  summary: string;
+  description?: string | null;
+  categoryId: string;
+  category: { id: string; name: string; description?: string };
+  relatedSystemId: string;
+  relatedSystem: { id: string; name: string; description?: string };
+  requestedPriority: Priority;
+  itPriority: Priority;
+  currentStatus: TicketStatus;
+  requesterId: string;
+  requester: { id: string; name: string; email: string };
+  createdAt: string;
+  updatedAt: string;
+  attachments: AttachmentMetadata[];
+}
+
 export interface SystemStatus {
   online: boolean;
   categories: Category[];
@@ -159,23 +186,22 @@ export async function fetchMyTickets(
 
   if (!res.ok) {
     throw new Error("Failed to fetch tickets");
-export interface RequesterUser {
-  id: string;
-  name: string;
-  email: string;
-}
-
-export async function fetchRequesters(): Promise<RequesterUser[]> {
-  let res: Response;
-  try {
-    res = await fetch(`${API_URL}/api/requesters`);
-  } catch {
-    throw new Error("Unable to connect to TokTickIT API");
-  }
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch active requesters");
   }
 
   return res.json();
+}
+
+export async function fetchTicketDetail(id: string, requesterId: string): Promise<TicketDetail> {
+  const res = await fetch(`${API_URL}/api/tickets/${id}`, {
+    headers: {
+      "X-Requester-Id": requesterId,
+    },
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json?.error || "Ticket not found or access denied");
+  }
+
+  return json;
 }

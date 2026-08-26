@@ -12,9 +12,10 @@ import { StatusBadge, PriorityBadge } from "./Badge";
 
 interface MyTicketsProps {
   onCreateTicketClick: () => void;
+  onSelectTicket?: (ticketId: string) => void;
 }
 
-export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick }) => {
+export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSelectTicket }) => {
   const { activeRequester } = useRequester();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -42,7 +43,7 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick }) => 
         setRelatedSystems(syss);
       })
       .catch(() => {
-        // ignore reference fetch errors for filter dropdowns
+        // ignore
       });
   }, []);
 
@@ -280,9 +281,24 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick }) => 
                 </thead>
                 <tbody>
                   {tickets.map((t) => (
-                    <tr key={t.id} data-testid={`ticket-row-${t.id}`}>
+                    <tr
+                      key={t.id}
+                      data-testid={`ticket-row-${t.id}`}
+                      onClick={() => onSelectTicket?.(t.id)}
+                      style={{ cursor: "pointer" }}
+                    >
                       <td>
-                        <span className="font-monospace fw-bold text-success">{t.ticketNumber}</span>
+                        <button
+                          type="button"
+                          className="btn btn-link p-0 font-monospace fw-bold text-success text-decoration-none"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectTicket?.(t.id);
+                          }}
+                          data-testid={`ticket-link-${t.id}`}
+                        >
+                          {t.ticketNumber}
+                        </button>
                       </td>
                       <td className="small text-muted">{new Date(t.createdAt).toLocaleDateString()}</td>
                       <td className="fw-semibold text-dark">{t.summary}</td>
@@ -308,7 +324,12 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick }) => 
           {/* Mobile & Tablet Card View (<992px) */}
           <div className="d-lg-none d-flex flex-column gap-3 mb-4" data-testid="mobile-cards-view">
             {tickets.map((t) => (
-              <div key={t.id} className="card shadow-sm border-0 p-3" style={{ borderRadius: 10 }}>
+              <div
+                key={t.id}
+                className="card shadow-sm border-0 p-3"
+                style={{ borderRadius: 10, cursor: "pointer" }}
+                onClick={() => onSelectTicket?.(t.id)}
+              >
                 <div className="d-flex align-items-center justify-content-between mb-2">
                   <span className="font-monospace fw-bold text-success small">{t.ticketNumber}</span>
                   <StatusBadge status={t.currentStatus} />

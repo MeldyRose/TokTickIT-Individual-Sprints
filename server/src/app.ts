@@ -213,4 +213,42 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
   }
 });
 
+// EP-06: Requester Ticket Detail View Endpoint (Issue 5)
+app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+  try {
+    const requesterId = req.headers["x-requester-id"] as string;
+    if (!requesterId) {
+      return res.status(400).json({ error: "X-Requester-Id header is required" });
+    }
+
+    const { id } = req.params;
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id },
+      include: {
+        category: { select: { id: true, name: true, description: true } },
+        relatedSystem: { select: { id: true, name: true, description: true } },
+        requester: { select: { id: true, name: true, email: true } },
+        attachments: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            fileName: true,
+            fileSize: true,
+            mimeType: true,
+            uploadedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!ticket || ticket.requesterId !== requesterId) {
+      return res.status(404).json({ error: "Ticket not found or access denied" });
+    }
+
+    res.status(200).json(ticket);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch ticket details" });
+  }
+});
+
 export default app;
