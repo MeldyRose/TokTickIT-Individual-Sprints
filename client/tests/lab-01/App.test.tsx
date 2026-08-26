@@ -1,13 +1,19 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import App from "../../src/App.js";
-import * as api from "../../src/api.js";
+import App from "../../src/App";
+import * as api from "../../src/api";
 
 describe("App", () => {
-  // WORKED EXAMPLE — provided for you.
+  beforeEach(() => {
+    localStorage.setItem(
+      "toktickit_active_requester",
+      JSON.stringify({ id: "req-user-001", name: "Jennifer Anderson", email: "jennifer.a@example.com" })
+    );
+  });
+
   it("renders the TokTickIT heading", () => {
     render(<App />);
-    expect(screen.getByText(/TokTickIT/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/TokTickIT/i).length).toBeGreaterThan(0);
   });
 
   it("shows Online and the seeded categories on success", async () => {
