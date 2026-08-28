@@ -58,10 +58,13 @@ export interface TicketListResponse {
 
 export interface AttachmentMetadata {
   id: string;
+  ticketId?: string;
   fileName: string;
   fileSize: number;
   mimeType: string;
   uploadedAt: string;
+  deletedAt?: string | null;
+  removalReason?: string | null;
 }
 
 export interface TicketDetail {
@@ -201,6 +204,97 @@ export async function fetchTicketDetail(id: string, requesterId: string): Promis
   const json = await res.json();
   if (!res.ok) {
     throw new Error(json?.error || "Ticket not found or access denied");
+  }
+
+  return json;
+}
+
+export async function uploadAttachment(
+  ticketId: string,
+  file: File,
+  requesterId: string
+): Promise<AttachmentMetadata> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+    method: "POST",
+    headers: {
+      "X-Requester-Id": requesterId,
+    },
+    body: formData,
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json?.error || "Failed to upload attachment");
+  }
+
+  return json;
+}
+
+export async function getAttachmentMetadata(
+  id: string,
+  requesterId: string
+): Promise<AttachmentMetadata> {
+  const res = await fetch(`${API_URL}/api/attachments/${id}/metadata`, {
+    headers: {
+      "X-Requester-Id": requesterId,
+    },
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json?.error || "Failed to fetch attachment metadata");
+  }
+
+  return json;
+}
+
+export async function downloadAttachment(
+  id: string,
+  fileName: string,
+  requesterId: string
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/attachments/${id}/download`, {
+    headers: {
+      "X-Requester-Id": requesterId,
+    },
+  });
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.error || "Attachment cannot be downloaded");
+  }
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function softRemoveAttachment(
+  id: string,
+  removalReason: string,
+  requesterId: string
+): Promise<AttachmentMetadata> {
+  const res = await fetch(`${API_URL}/api/attachments/${id}`, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requester-Id": requesterId,
+    },
+    body: JSON.stringify({ removalReason }),
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json?.error || "Failed to soft-remove attachment");
   }
 
   return json;

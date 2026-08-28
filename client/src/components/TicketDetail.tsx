@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { fetchTicketDetail, TicketDetail as ITicketDetail } from "../api";
+import {
+  fetchTicketDetail,
+  TicketDetail as ITicketDetail,
+  AttachmentMetadata,
+  uploadAttachment,
+  downloadAttachment,
+  softRemoveAttachment,
+} from "../api";
 import { useRequester } from "../context/RequesterContext";
 import { StatusBadge, PriorityBadge } from "./Badge";
 
@@ -11,8 +18,17 @@ interface TicketDetailProps {
 export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) => {
   const { activeRequester } = useRequester();
   const [ticket, setTicket] = useState<ITicketDetail | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentMetadata[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Attachment upload & soft remove state
+  const [uploading, setUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const [removeModalAttachment, setRemoveModalAttachment] = useState<AttachmentMetadata | null>(null);
+  const [removalReason, setRemovalReason] = useState<string>("");
+  const [removeSubmitting, setRemoveSubmitting] = useState<boolean>(false);
 
   // Tabs state for bottom section
   const [activeTab, setActiveTab] = useState<"comments" | "attachments" | "actions" | "events">("comments");
@@ -48,10 +64,92 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
     setLoading(true);
     setError(null);
     fetchTicketDetail(ticketId, activeRequester.id)
-      .then((data) => setTicket(data))
+      .then((data) => {
+        setTicket(data);
+        setAttachments(data.attachments || []);
+      })
       .catch((err) => setError(err?.message || "Ticket not found or access denied"))
       .finally(() => setLoading(false));
   }, [ticketId, activeRequester]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeRequester || !ticketId) return;
+
+    setUploadError(null);
+
+    const allowedMime = ["image/jpeg", "image/jpg", "image/png", "image/webp", "application/pdf"];
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const allowedExts = ["jpg", "jpeg", "png", "webp", "pdf"];
+
+    if (!allowedMime.includes(file.type) && (!ext || !allowedExts.includes(ext))) {
+      setUploadError("File type not permitted or file size exceeds 5MB limit");
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("File type not permitted or file size exceeds 5MB limit");
+      e.target.value = "";
+      return;
+    }
+
+    const activeCount = attachments.filter((a) => !a.deletedAt).length;
+    if (activeCount >= 5) {
+      setUploadError("Maximum active attachments limit (5) reached for this ticket");
+      e.target.value = "";
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const newAtt = await uploadAttachment(ticketId, file, activeRequester.id);
+      setAttachments((prev) => [...prev, newAtt]);
+      e.target.value = "";
+    } catch (err: any) {
+      setUploadError(err?.message || "Failed to upload attachment");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownload = async (attachmentId: string, fileName: string) => {
+    if (!activeRequester) return;
+    try {
+      await downloadAttachment(attachmentId, fileName, activeRequester.id);
+    } catch (err: any) {
+      alert(err?.message || "Download failed");
+    }
+  };
+
+  const openRemoveModal = (att: AttachmentMetadata) => {
+    setRemoveModalAttachment(att);
+    setRemovalReason("");
+  };
+
+  const closeRemoveModal = () => {
+    if (removeSubmitting) return;
+    setRemoveModalAttachment(null);
+    setRemovalReason("");
+  };
+
+  const handleConfirmRemove = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!removeModalAttachment || !removalReason.trim() || !activeRequester) return;
+
+    setRemoveSubmitting(true);
+    try {
+      const updatedAtt = await softRemoveAttachment(removeModalAttachment.id, removalReason, activeRequester.id);
+      setAttachments((prev) =>
+        prev.map((a) => (a.id === updatedAtt.id ? { ...a, ...updatedAtt } : a))
+      );
+      closeRemoveModal();
+    } catch (err: any) {
+      alert(err?.message || "Failed to remove attachment");
+    } finally {
+      setRemoveSubmitting(false);
+    }
+  };
 
   const handleAddComment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -260,7 +358,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
               className={`nav-link fw-semibold ${activeTab === "attachments" ? "active text-success border-bottom border-success border-2" : "text-secondary"}`}
               onClick={() => setActiveTab("attachments")}
             >
-              📎 Attachments <span className="badge bg-secondary ms-1">{ticket.attachments?.length || 0}</span>
+              📎 Attachments <span className="badge bg-secondary ms-1">{attachments.filter((a) => !a.deletedAt).length}</span>
             </button>
           </li>
           <li className="nav-item">
@@ -347,18 +445,115 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
           </div>
         )}
 
-        {/* Tab 2: Attachments Placeholder */}
+        {/* Tab 2: Attachments Section */}
         {activeTab === "attachments" && (
           <div>
-            {ticket.attachments && ticket.attachments.length > 0 ? (
-              <ul className="list-group">
-                {ticket.attachments.map((att) => (
-                  <li key={att.id} className="list-group-item d-flex justify-content-between align-items-center">
-                    <span>📎 {att.fileName} ({(att.fileSize / 1024).toFixed(1)} KB)</span>
-                    <span className="small text-muted">{new Date(att.uploadedAt).toLocaleDateString()}</span>
-                  </li>
-                ))}
-              </ul>
+            {/* Upload Box */}
+            <div className="p-3 mb-4 rounded border bg-light">
+              <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                <div>
+                  <h6 className="fw-bold text-dark mb-1">Upload Supporting Evidence</h6>
+                  <p className="small text-muted mb-0">
+                    Permitted formats: <strong>JPG, PNG, WEBP, PDF</strong>. Max size: <strong>5 MB</strong>. Limit: <strong>5 active attachments</strong>.
+                  </p>
+                </div>
+                <div className="d-flex align-items-center gap-2">
+                  <input
+                    type="file"
+                    id="attachment-file-input"
+                    className="d-none"
+                    accept=".jpg,.jpeg,.png,.webp,.pdf"
+                    onChange={handleFileChange}
+                    disabled={uploading}
+                    data-testid="file-upload-input"
+                  />
+                  <label
+                    htmlFor="attachment-file-input"
+                    className={`btn text-white fw-semibold btn-sm text-nowrap mb-0 ${uploading ? "disabled opacity-75" : ""}`}
+                    style={{ backgroundColor: "#006B3C", cursor: "pointer" }}
+                    data-testid="select-file-btn"
+                  >
+                    {uploading ? "Uploading..." : "📎 Choose & Upload File"}
+                  </label>
+                </div>
+              </div>
+              {uploadError && (
+                <div className="alert alert-danger small mb-0 mt-3 p-2" role="alert" data-testid="upload-error-alert">
+                  ⚠️ {uploadError}
+                </div>
+              )}
+            </div>
+
+            {/* Attachments List */}
+            {attachments && attachments.length > 0 ? (
+              <div className="d-flex flex-column gap-3">
+                {attachments.map((att) => {
+                  const isRemoved = !!att.deletedAt;
+                  return (
+                    <div
+                      key={att.id}
+                      className={`p-3 rounded border d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 ${
+                        isRemoved ? "bg-light text-muted border-secondary opacity-75" : "bg-white"
+                      }`}
+                      data-testid={`attachment-item-${att.id}`}
+                    >
+                      <div className="d-flex align-items-center gap-3">
+                        <span style={{ fontSize: 24 }}>{isRemoved ? "📄" : "📎"}</span>
+                        <div>
+                          <div className="d-flex align-items-center gap-2">
+                            <span className={`fw-semibold ${isRemoved ? "text-decoration-line-through text-muted" : "text-dark"}`}>
+                              {att.fileName}
+                            </span>
+                            {isRemoved ? (
+                              <span className="badge bg-secondary" data-testid="removed-badge">Soft Removed</span>
+                            ) : (
+                              <span className="badge bg-success" style={{ fontSize: 10 }}>Active</span>
+                            )}
+                          </div>
+                          <div className="small text-muted mt-1">
+                            {(att.fileSize / 1024).toFixed(1)} KB • Uploaded {new Date(att.uploadedAt).toLocaleString()}
+                          </div>
+                          {isRemoved && att.removalReason && (
+                            <div className="small text-danger fst-italic mt-1" data-testid="removal-reason-display">
+                              Reason for removal: "{att.removalReason}"
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="d-flex align-items-center gap-2 mt-2 mt-md-0">
+                        {isRemoved ? (
+                          <button
+                            className="btn btn-sm btn-outline-secondary disabled"
+                            disabled
+                            title="Soft-removed attachment cannot be downloaded"
+                            data-testid={`download-disabled-btn-${att.id}`}
+                          >
+                            🚫 Download Blocked
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              className="btn btn-sm btn-outline-success"
+                              onClick={() => handleDownload(att.id, att.fileName)}
+                              data-testid={`download-btn-${att.id}`}
+                            >
+                              ⬇ Download
+                            </button>
+                            <button
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => openRemoveModal(att)}
+                              data-testid={`remove-btn-${att.id}`}
+                            >
+                              🗑 Soft Remove
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
               <div className="p-4 bg-light rounded text-center text-muted small" data-testid="empty-attachments">
                 No active attachments uploaded for this ticket.
@@ -401,6 +596,73 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({ ticketId, onBack }) 
           </div>
         )}
       </div>
+
+      {/* Soft Remove Modal */}
+      {removeModalAttachment && (
+        <div
+          className="modal d-block"
+          style={{ backgroundColor: "rgba(0, 0, 0, 0.5)" }}
+          tabIndex={-1}
+          role="dialog"
+          data-testid="soft-remove-modal"
+        >
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content">
+              <div className="modal-header border-bottom-0 pb-0">
+                <h5 className="modal-title text-danger fw-bold">Soft Remove Attachment</h5>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={closeRemoveModal}
+                  disabled={removeSubmitting}
+                />
+              </div>
+              <form onSubmit={handleConfirmRemove}>
+                <div className="modal-body py-3">
+                  <p className="small text-secondary mb-3">
+                    Are you sure you want to remove <strong>{removeModalAttachment.fileName}</strong>?
+                    The file metadata will remain visible on Ticket Detail, but binary downloading will be permanently blocked.
+                  </p>
+                  <div className="mb-3">
+                    <label htmlFor="removalReasonInput" className="form-label small fw-semibold text-dark">
+                      Reason for Removal <span className="text-danger">*</span>
+                    </label>
+                    <textarea
+                      id="removalReasonInput"
+                      className="form-control form-control-sm"
+                      rows={3}
+                      placeholder="Please specify why this attachment is being removed..."
+                      value={removalReason}
+                      onChange={(e) => setRemovalReason(e.target.value)}
+                      required
+                      data-testid="removal-reason-input"
+                    />
+                  </div>
+                </div>
+                <div className="modal-footer border-top-0 pt-0">
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={closeRemoveModal}
+                    disabled={removeSubmitting}
+                    data-testid="cancel-remove-btn"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-danger btn-sm text-white fw-semibold"
+                    disabled={!removalReason.trim() || removeSubmitting}
+                    data-testid="confirm-remove-btn"
+                  >
+                    {removeSubmitting ? "Removing..." : "Confirm Removal"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
