@@ -15,20 +15,20 @@ The test plan spans six distinct testing levels:
 
 | Test ID | Type | Requirement / AC | What It Tests | Expected Result | Automated Test File | Final |
 |---|---|---|---|---|---|---|
-| UNIT-01 | Unit | BR-01, FR-03 | Ticket Number generator format | Returns string matching required pattern `TKT-YYYY-XXXXXX` | `server/tests/lab-02/ticketNumber.test.ts` | PLANNED |
-| API-01 | API | AC-01, FR-02, BR-01 | Ticket creation endpoint `POST /api/tickets` | 201 Created; Ticket saved in DB; official Ticket Number returned | `server/tests/lab-02/tickets.test.ts` | PLANNED |
-| API-02 | API | AC-02, AC-04, FR-04 | Paginated ticket list retrieval `GET /api/tickets` | 200 OK; returns paginated array of tickets scoped to `X-Requester-Id` header | `server/tests/lab-02/tickets.test.ts` | PLANNED |
-| API-03 | API | AC-03, FR-07, BR-05 | Detail retrieval for unowned ticket `GET /api/tickets/:id` | 403 Forbidden or 404 Not Found; ticket data of another Requester is protected | `server/tests/lab-02/tickets.test.ts` | PLANNED |
-| API-04 | API | AC-05, AC-06, FR-08..10 | Ticket search, filter, sort, and pagination | 200 OK; returns items correctly filtered by search query, category, status, system, and sort order | `server/tests/lab-02/tickets.test.ts` | PLANNED |
-| API-05 | API | AC-07, FR-12, BR-07 | Attachment file upload `POST /api/tickets/:id/attachments` | 201 Created; validates file type (JPG/PNG/WEBP/PDF), max size (5MB), max active (5); saves metadata | `server/tests/lab-02/attachments.test.ts` | PLANNED |
-| API-06 | API | AC-08, FR-14, BR-08 | Attachment soft removal `DELETE /api/attachments/:id` | 200 OK; sets `deletedAt` and `removalReason`; download endpoint blocks removed file | `server/tests/lab-02/attachments.test.ts` | PLANNED |
-| API-07 | API | AC-10, BR-04 | Active Development Requesters retrieval `GET /api/requesters` | 200 OK; returns active requesters; excludes inactive requesters | `server/tests/lab-02/requesters.test.ts` | PLANNED |
-| UI-01 | UI Component | AC-09, BR-06 | Form submission without mandatory fields | Field validation error message displayed; API submit function not invoked | `client/tests/lab-02/CreateTicket.test.tsx` | PLANNED |
-| UI-02 | UI Component | AC-02, FR-05 | Unselected requester navigation state | Requester Selection screen rendered when no active requester is set | `client/tests/lab-02/MyTickets.test.tsx` | PLANNED |
-| UI-03 | UI Component | AC-11, BR-10 | Empty list and no-results search states | Displays empty state / no-results component with "Clear Filters" action when 0 tickets match | `client/tests/lab-02/MyTickets.test.tsx` | PLANNED |
-| UI-04 | UI Style | AC-13, BR-11 | Zen Green styling & accessibility attributes | Color tokens, badges, focus rings, read-only fields, and ARIA labels conform to UI spec | `client/tests/lab-02/UIStyle.test.tsx` | PLANNED |
-| RESP-01 | Responsive | AC-12 | Mobile breakpoint layout shift (<768px) | Table layout transforms into stacked card view on mobile viewports without overflow | `client/tests/lab-02/Responsive.test.tsx` | PLANNED |
-| E2E-01 | E2E | AC-01, AC-04, AC-07 | Complete ticket submission, file attachment, and list retrieval flow | Confirmation screen shows official number; ticket appears in My Tickets with attachment metadata | `e2e/lab-02/ticket-flow.spec.ts` | PLANNED |
+| UNIT-01 | Unit | BR-01, FR-03 | Ticket Number generator format | Returns string matching required pattern `TKT-YYYY-XXXXXX` | `server/tests/lab-02/ticketNumber.test.ts` | PASS |
+| API-01 | API | AC-01, FR-02, BR-01 | Ticket creation endpoint `POST /api/tickets` | 201 Created; Ticket saved in DB; official Ticket Number returned | `server/tests/lab-02/tickets.test.ts` | PASS |
+| API-02 | API | AC-02, AC-04, FR-04 | Paginated ticket list retrieval `GET /api/tickets` | 200 OK; returns paginated array of tickets scoped to `X-Requester-Id` header | `server/tests/lab-02/tickets.test.ts` | PASS |
+| API-03 | API | AC-03, FR-07, BR-05 | Detail retrieval for unowned ticket `GET /api/tickets/:id` | 403 Forbidden or 404 Not Found; ticket data of another Requester is protected | `server/tests/lab-02/tickets.test.ts` | PASS |
+| API-04 | API | AC-05, AC-06, FR-08..10 | Ticket search, filter, sort, and pagination | 200 OK; returns items correctly filtered by search query, category, status, system, and sort order | `server/tests/lab-02/tickets.test.ts` | PASS |
+| API-05 | API | AC-07, FR-12, BR-07 | Attachment file upload `POST /api/tickets/:id/attachments` | 201 Created; validates file type (JPG/PNG/WEBP/PDF), max size (5MB), max active (5); saves metadata | `server/tests/lab-02/attachments.test.ts` | PASS |
+| API-06 | API | AC-08, FR-14, BR-08 | Attachment soft removal `DELETE /api/attachments/:id` | 200 OK; sets `deletedAt` and `removalReason`; download endpoint blocks removed file | `server/tests/lab-02/attachments.test.ts` | PASS |
+| API-07 | API | AC-10, BR-04 | Active Development Requesters retrieval `GET /api/requesters` | 200 OK; returns active requesters; excludes inactive requesters | `server/tests/lab-02/requesters.test.ts` | PASS |
+| UI-01 | UI Component | AC-09, BR-06 | Form submission without mandatory fields | Field validation error message displayed; API submit function not invoked | `client/tests/lab-02/CreateTicket.test.tsx` | PASS |
+| UI-02 | UI Component | AC-02, FR-05 | Unselected requester navigation state | Requester Selection screen rendered when no active requester is set | `client/tests/lab-02/MyTickets.test.tsx` | PASS |
+| UI-03 | UI Component | AC-11, BR-10 | Empty list and no-results search states | Displays empty state / no-results component with "Clear Filters" action when 0 tickets match | `client/tests/lab-02/MyTickets.test.tsx` | PASS |
+| UI-04 | UI Style | AC-13, BR-11 | Zen Green styling & accessibility attributes | Color tokens, badges, focus rings, read-only fields, and ARIA labels conform to UI spec | `client/tests/lab-02/RequesterSelection.test.tsx` | PASS |
+| RESP-01 | Responsive | AC-12 | Mobile breakpoint layout shift (<768px) | Table layout transforms into stacked card view on mobile viewports without overflow | `client/tests/lab-02/Responsive.test.tsx` | PASS |
+| E2E-01 | E2E | AC-01, AC-04, AC-07 | Complete ticket submission, file attachment, and list retrieval flow | Confirmation screen shows official number; ticket appears in My Tickets with attachment metadata | `e2e/lab-02/ticket-flow.spec.ts` | PASS |
 
 ## 3. Acceptance-Criterion Traceability
 
@@ -72,20 +72,20 @@ The test plan spans six distinct testing levels:
 
 | Test ID | Status | Execution Date | Evidence / Log Snippet |
 |---|---|---|---|
-| UNIT-01 | PENDING | - | Not run yet (Planned before implementation) |
-| API-01 | PENDING | - | Not run yet (Planned before implementation) |
-| API-02 | PENDING | - | Not run yet (Planned before implementation) |
-| API-03 | PENDING | - | Not run yet (Planned before implementation) |
-| API-04 | PENDING | - | Not run yet (Planned before implementation) |
-| API-05 | PENDING | - | Not run yet (Planned before implementation) |
-| API-06 | PENDING | - | Not run yet (Planned before implementation) |
-| API-07 | PENDING | - | Not run yet (Planned before implementation) |
-| UI-01 | PENDING | - | Not run yet (Planned before implementation) |
-| UI-02 | PENDING | - | Not run yet (Planned before implementation) |
-| UI-03 | PENDING | - | Not run yet (Planned before implementation) |
-| UI-04 | PENDING | - | Not run yet (Planned before implementation) |
-| RESP-01 | PENDING | - | Not run yet (Planned before implementation) |
-| E2E-01 | PENDING | - | Not run yet (Planned before implementation) |
+| UNIT-01 | PASS | 2026-09-05 | `✓ tests/lab-02/ticketNumber.test.ts (1 test) - Returns string matching required pattern TKT-YYYY-XXXXXX` |
+| API-01 | PASS | 2026-09-05 | `✓ tests/lab-02/tickets.test.ts - POST /api/tickets returns 201 Created with official Ticket Number` |
+| API-02 | PASS | 2026-09-05 | `✓ tests/lab-02/tickets.test.ts - GET /api/tickets returns paginated tickets scoped strictly to X-Requester-Id` |
+| API-03 | PASS | 2026-09-05 | `✓ tests/lab-02/ticketDetail.test.ts - GET /api/tickets/:id returns 404/403 for unowned ticket` |
+| API-04 | PASS | 2026-09-05 | `✓ tests/lab-02/tickets.test.ts - GET /api/tickets supports search, filtering, sorting, and pagination` |
+| API-05 | PASS | 2026-09-05 | `✓ tests/lab-02/attachments.api.test.ts - POST /api/tickets/:id/attachments validates file type, size (5MB), and max active (5)` |
+| API-06 | PASS | 2026-09-05 | `✓ tests/lab-02/attachments.api.test.ts - DELETE /api/attachments/:id soft-removes file & blocks download` |
+| API-07 | PASS | 2026-09-05 | `✓ tests/lab-02/requesters.test.ts - GET /api/requesters returns active requesters & excludes inactive` |
+| UI-01 | PASS | 2026-09-05 | `✓ tests/lab-02/CreateTicket.test.tsx - Form submission triggers field validation error without calling API` |
+| UI-02 | PASS | 2026-09-05 | `✓ tests/lab-02/MyTickets.test.tsx - Unselected requester renders Requester Selection screen` |
+| UI-03 | PASS | 2026-09-05 | `✓ tests/lab-02/MyTickets.test.tsx - Displays empty state and clear filters action when 0 tickets match` |
+| UI-04 | PASS | 2026-09-05 | `✓ tests/lab-02/RequesterSelection.test.tsx - Zen Green color tokens, badges, and header identity display verified` |
+| RESP-01 | PASS | 2026-09-05 | `✓ tests/lab-02/Responsive.test.tsx - Desktop table layout transforms into stacked card view on mobile (<768px)` |
+| E2E-01 | PASS | 2026-09-05 | `✓ e2e/lab-02/ticket-flow.spec.ts - 2 passed (18.6s) Complete submission, attachment, and list retrieval flow` |
 
 ## 7. Known Limitations or Deferred Tests
 
