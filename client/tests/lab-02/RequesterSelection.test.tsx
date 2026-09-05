@@ -36,6 +36,9 @@ describe("Development Requester Selection (Issue 3)", () => {
     expect(screen.getByText("Jennifer Anderson (jennifer.a@example.com)")).toBeInTheDocument();
     expect(screen.getByText("Michael Brown (michael.b@example.com)")).toBeInTheDocument();
 
+    // Select Jennifer Anderson from dropdown
+    fireEvent.change(selectElement, { target: { value: "req-user-001" } });
+
     // Click Continue button
     const continueBtn = screen.getByTestId("continue-btn");
     fireEvent.click(continueBtn);
