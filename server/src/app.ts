@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import { getPrisma } from "./prisma.js";
 import { generateTicketNumber } from "./utils/ticketNumber.js";
-import { Priority, TicketStatus } from "@prisma/client";
+import { RequestedPriority, ITPriority, TicketStatus, Role } from "@prisma/client";
 
 // Ensure uploads folder exists
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -43,8 +43,8 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
 
 app.get("/api/requesters", async (_req: Request, res: Response) => {
   try {
-    const requesters = await getPrisma().requesterUser.findMany({
-      where: { isActive: true },
+    const requesters = await getPrisma().user.findMany({
+      where: { isActive: true, role: Role.REQUESTER },
       select: {
         id: true,
         name: true,
@@ -103,9 +103,10 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Validation failure", details });
     }
 
-    const priorityEnum = (requestedPriority && ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(requestedPriority))
-      ? (requestedPriority as Priority)
-      : Priority.MEDIUM;
+    const reqPriorityEnum = (requestedPriority && ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(requestedPriority))
+      ? (requestedPriority as RequestedPriority)
+      : RequestedPriority.MEDIUM;
+    const itPriorityEnum = reqPriorityEnum as unknown as ITPriority;
 
     const ticketNumber = generateTicketNumber();
 
@@ -113,11 +114,11 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
       data: {
         ticketNumber,
         summary: summary.trim(),
-        description: description ? description.trim() : null,
+        description: description ? description.trim() : "",
         categoryId,
         relatedSystemId,
-        requestedPriority: priorityEnum,
-        itPriority: priorityEnum,
+        requestedPriority: reqPriorityEnum,
+        itPriority: itPriorityEnum,
         currentStatus: TicketStatus.NEW,
         requesterId,
       },
