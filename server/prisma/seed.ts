@@ -30,7 +30,7 @@ const USERS = [
     passwordHash: DEFAULT_PASSWORD_HASH,
     role: Role.REQUESTER,
     isActive: true,
-    mustChangePassword: false,
+    mustChangePassword: true,
   },
   {
     id: "req-user-002",

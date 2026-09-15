@@ -18,7 +18,12 @@ const upload = multer({ dest: uploadDir });
 
 export const app = express();
 
-app.use(cors());          // already wired: lets the Vite dev server call this API
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 app.use("/api/auth", authRouter);

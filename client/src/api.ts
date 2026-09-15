@@ -12,6 +12,16 @@ export interface RelatedSystem {
   description?: string;
 }
 
+export type UserRole = "REQUESTER" | "IT_STAFF" | "ADMINISTRATOR";
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  mustChangePassword: boolean;
+}
+
 export interface RequesterUser {
   id: string;
   name: string;
@@ -295,6 +305,69 @@ export async function softRemoveAttachment(
   const json = await res.json();
   if (!res.ok) {
     throw new Error(json?.error || "Failed to soft-remove attachment");
+  }
+
+  return json;
+}
+
+export async function loginUser(email: string, password: string): Promise<AuthUser> {
+  const res = await fetch(`${API_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    const errorMsg = json?.error?.message || json?.error || "Invalid email or password. Please try again.";
+    throw new Error(typeof errorMsg === "string" ? errorMsg : "Invalid email or password. Please try again.");
+  }
+
+  return json.user;
+}
+
+export async function logoutUser(): Promise<void> {
+  const res = await fetch(`${API_URL}/api/auth/logout`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to logout");
+  }
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  const res = await fetch(`${API_URL}/api/auth/me`, {
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    return null;
+  }
+
+  const json = await res.json();
+  return json.user || null;
+}
+
+export async function changePasswordUser(
+  currentPassword: string,
+  newPassword: string,
+  confirmNewPassword?: string
+): Promise<{ message: string; mustChangePassword: boolean }> {
+  const res = await fetch(`${API_URL}/api/auth/change-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ currentPassword, newPassword, confirmNewPassword }),
+  });
+
+  const json = await res.json();
+  if (!res.ok) {
+    const errorMsg = json?.error?.message || json?.error || "Failed to change password";
+    throw new Error(typeof errorMsg === "string" ? errorMsg : "Failed to change password");
   }
 
   return json;
