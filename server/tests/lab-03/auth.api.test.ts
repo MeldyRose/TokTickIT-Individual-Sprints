@@ -48,6 +48,7 @@ describe("Authentication & Password Management API (Issue 14)", () => {
       expect(res.body.user.email).toBe(activeEmail);
       expect(res.body.user).toHaveProperty("role");
       expect(res.body.user).toHaveProperty("mustChangePassword");
+      expect(res.body).not.toHaveProperty("token");
 
       // Verify Set-Cookie header contains HttpOnly session cookie
       const cookies = res.headers["set-cookie"];
