@@ -7,7 +7,7 @@ import {
   Category,
   RelatedSystem,
 } from "../api";
-import { useRequester } from "../context/RequesterContext";
+import { useAuth } from "../context/AuthContext";
 import { StatusBadge, PriorityBadge } from "./Badge";
 
 interface MyTicketsProps {
@@ -16,7 +16,7 @@ interface MyTicketsProps {
 }
 
 export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSelectTicket }) => {
-  const { activeRequester } = useRequester();
+  const { user } = useAuth();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -48,23 +48,20 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSel
   }, []);
 
   const loadTickets = async () => {
-    if (!activeRequester) return;
+    if (!user) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchMyTickets(
-        {
-          page,
-          limit: 10,
-          search,
-          categoryId,
-          status,
-          relatedSystemId,
-          sortBy,
-          order,
-        },
-        activeRequester.id
-      );
+      const res = await fetchMyTickets({
+        page,
+        limit: 10,
+        search,
+        categoryId,
+        status,
+        relatedSystemId,
+        sortBy,
+        order,
+      });
       setTickets(res.data);
       setTotalPages(res.pagination.totalPages);
       setTotalItems(res.pagination.totalItems);
@@ -77,7 +74,7 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSel
 
   useEffect(() => {
     loadTickets();
-  }, [activeRequester, page, search, categoryId, status, relatedSystemId, sortBy, order]);
+  }, [user, page, search, categoryId, status, relatedSystemId, sortBy, order]);
 
   const handleClearFilters = () => {
     setSearch("");
