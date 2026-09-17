@@ -277,6 +277,44 @@ export async function updateRequesterTicketStatus(
   return json;
 }
 
+export async function updateTicketStatus(
+  ticketId: string,
+  status: string,
+  comment?: string
+): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus }> {
+  return updateRequesterTicketStatus(ticketId, status, comment);
+}
+
+export async function claimOrReassignOwner(
+  ticketId: string,
+  ownerId?: string | null
+): Promise<{ message: string; ticketId: string; owner: { id: string; name: string; email: string } | null }> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/owner`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ ownerId }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Failed to update ticket ownership");
+  return json;
+}
+
+export async function updateItPriority(
+  ticketId: string,
+  itPriority: Priority
+): Promise<{ message: string; ticketId: string; itPriority: Priority }> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/priority`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ itPriority }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Failed to update IT Priority");
+  return json;
+}
+
 export async function uploadAttachment(
   ticketId: string,
   file: File,
