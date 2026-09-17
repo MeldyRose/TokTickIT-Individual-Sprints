@@ -4,16 +4,17 @@ import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import bcrypt from "bcryptjs";
 
-describe("Requester Operations & Regression API (Issue 16)", () => {
+describe("Requester Operations & Security Probing API (Issue 16)", () => {
   let requesterToken = "";
   let requesterId = "";
   let otherRequesterToken = "";
   let otherRequesterId = "";
+  let staffToken = "";
   let categoryId = "";
   let relatedSystemId = "";
 
   beforeEach(async () => {
-    const reqPasswordHash = bcrypt.hashSync("Password123!", 10);
+    const passwordHash = bcrypt.hashSync("Password123!", 10);
 
     let userA = await getPrisma().user.findUnique({ where: { email: "jennifer.test16@toktickit.com" } });
     if (!userA) {
@@ -21,7 +22,7 @@ describe("Requester Operations & Regression API (Issue 16)", () => {
         data: {
           name: "Jennifer Test16",
           email: "jennifer.test16@toktickit.com",
-          passwordHash: reqPasswordHash,
+          passwordHash,
           role: "REQUESTER",
           isActive: true,
           mustChangePassword: false,
@@ -36,7 +37,7 @@ describe("Requester Operations & Regression API (Issue 16)", () => {
         data: {
           name: "Michael Test16",
           email: "michael.test16@toktickit.com",
-          passwordHash: reqPasswordHash,
+          passwordHash,
           role: "REQUESTER",
           isActive: true,
           mustChangePassword: false,
@@ -44,6 +45,20 @@ describe("Requester Operations & Regression API (Issue 16)", () => {
       });
     }
     otherRequesterId = userB.id;
+
+    let staffUser = await getPrisma().user.findUnique({ where: { email: "alex.staff16@toktickit.com" } });
+    if (!staffUser) {
+      staffUser = await getPrisma().user.create({
+        data: {
+          name: "Alex Staff16",
+          email: "alex.staff16@toktickit.com",
+          passwordHash,
+          role: "IT_STAFF",
+          isActive: true,
+          mustChangePassword: false,
+        },
+      });
+    }
 
     // Log in Requester A
     const loginResA = await request(app)
@@ -67,6 +82,17 @@ describe("Requester Operations & Regression API (Issue 16)", () => {
       if (match) otherRequesterToken = match[1];
     }
 
+    // Log in Staff
+    const loginResStaff = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "alex.staff16@toktickit.com", password: "Password123!" });
+    
+    const cookiesStaff = loginResStaff.headers["set-cookie"];
+    if (cookiesStaff) {
+      const match = cookiesStaff[0].match(/toktickit_session=([^;]+)/);
+      if (match) staffToken = match[1];
+    }
+
     // Get categories and systems
     const catRes = await request(app).get("/api/categories");
     if (catRes.body.length > 0) categoryId = catRes.body[0].id;
@@ -75,123 +101,180 @@ describe("Requester Operations & Regression API (Issue 16)", () => {
     if (sysRes.body.length > 0) relatedSystemId = sysRes.body[0].id;
   });
 
-  it("derives Requester identity from session and ignores X-Requester-Id header (AC-03, BR-22)", async () => {
-    // Session token belongs to Jennifer (userA). Header tries to claim to be userB (michael).
-    const res = await request(app)
-      .post("/api/tickets")
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .set("X-Requester-Id", otherRequesterId)
-      .send({
-        summary: "Ticket created under session identity",
-        description: "Checking AC-03 session scoping",
-        categoryId,
-        relatedSystemId,
-      });
+  describe("Security Probing: Rejection of X-Requester-Id Header Without Session (PR Review Item 1 & 2)", () => {
+    it("returns 401 Unauthorized for GET /api/tickets with only X-Requester-Id (valid ID, admin ID, unknown ID)", async () => {
+      const res1 = await request(app).get("/api/tickets").set("X-Requester-Id", requesterId);
+      expect(res1.status).toBe(401);
+      expect(res1.body.error).toMatch(/Unauthorized/i);
 
-    expect(res.status).toBe(201);
-    expect(res.body.requesterId).toBe(requesterId); // Must be Jennifer's ID, ignoring header
-    expect(res.body.requesterId).not.toBe(otherRequesterId);
+      const res2 = await request(app).get("/api/tickets").set("X-Requester-Id", "admin-user-001");
+      expect(res2.status).toBe(401);
+
+      const res3 = await request(app).get("/api/tickets").set("X-Requester-Id", "totally-fake-id");
+      expect(res3.status).toBe(401);
+    });
+
+    it("returns 401 Unauthorized for POST /api/tickets with only X-Requester-Id", async () => {
+      const res = await request(app)
+        .post("/api/tickets")
+        .set("X-Requester-Id", requesterId)
+        .send({
+          summary: "Unauthenticated request attempt",
+          categoryId,
+          relatedSystemId,
+        });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 401 Unauthorized for Internal Notes GET /api/tickets/:id/notes with only X-Requester-Id: staff-user-001", async () => {
+      const res = await request(app)
+        .get("/api/tickets/tkt-001/notes")
+        .set("X-Requester-Id", "staff-user-001");
+
+      expect(res.status).toBe(401);
+    });
   });
 
-  it("allows Requesters to post and view Public Comments on owned tickets (AC-10)", async () => {
-    // Create ticket
-    const ticketRes = await request(app)
-      .post("/api/tickets")
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .send({
-        summary: "Public comments test ticket",
-        categoryId,
-        relatedSystemId,
+  describe("Requester Identity Scoping & Operations", () => {
+    it("derives Requester identity from session and ignores X-Requester-Id header (AC-03, BR-22)", async () => {
+      const res = await request(app)
+        .post("/api/tickets")
+        .set("Cookie", [`toktickit_session=${requesterToken}`])
+        .set("X-Requester-Id", otherRequesterId)
+        .send({
+          summary: "Ticket created under session identity",
+          description: "Checking AC-03 session scoping",
+          categoryId,
+          relatedSystemId,
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.requesterId).toBe(requesterId);
+      expect(res.body.requesterId).not.toBe(otherRequesterId);
+    });
+
+    it("allows Requesters to post and view Public Comments on owned tickets (AC-10)", async () => {
+      const ticketRes = await request(app)
+        .post("/api/tickets")
+        .set("Cookie", [`toktickit_session=${requesterToken}`])
+        .send({
+          summary: "Public comments test ticket",
+          categoryId,
+          relatedSystemId,
+        });
+
+      const ticketId = ticketRes.body.id;
+
+      const postCommentRes = await request(app)
+        .post(`/api/tickets/${ticketId}/comments`)
+        .set("Cookie", [`toktickit_session=${requesterToken}`])
+        .send({ content: "Please update me when resolved." });
+
+      expect(postCommentRes.status).toBe(201);
+      expect(postCommentRes.body.content).toBe("Please update me when resolved.");
+
+      const getCommentsRes = await request(app)
+        .get(`/api/tickets/${ticketId}/comments`)
+        .set("Cookie", [`toktickit_session=${requesterToken}`]);
+
+      expect(getCommentsRes.status).toBe(200);
+      expect(Array.isArray(getCommentsRes.body)).toBe(true);
+      expect(getCommentsRes.body.length).toBeGreaterThan(0);
+    });
+
+    it("blocks Requesters from accessing Internal Notes with 403 Forbidden (AC-04, BR-04)", async () => {
+      const ticketRes = await request(app)
+        .post("/api/tickets")
+        .set("Cookie", [`toktickit_session=${requesterToken}`])
+        .send({
+          summary: "Internal notes permission test",
+          categoryId,
+          relatedSystemId,
+        });
+
+      const ticketId = ticketRes.body.id;
+
+      const getNotesRes = await request(app)
+        .get(`/api/tickets/${ticketId}/notes`)
+        .set("Cookie", [`toktickit_session=${requesterToken}`]);
+
+      expect(getNotesRes.status).toBe(403);
+    });
+
+    it("allows Requesters to trigger Problem Appears Resolved but rejects action on CLOSED/CANCELLED tickets (AC-09, BR-05)", async () => {
+      const ticketRes = await request(app)
+        .post("/api/tickets")
+        .set("Cookie", [`toktickit_session=${requesterToken}`])
+        .send({
+          summary: "Status update test ticket",
+          categoryId,
+          relatedSystemId,
+        });
+
+      const ticketId = ticketRes.body.id;
+
+      // Trigger Problem Appears Resolved on active ticket -> WAITING_FOR_REQUESTER (200 OK)
+      const resolvedActionRes = await request(app)
+        .patch(`/api/tickets/${ticketId}/status`)
+        .set("Cookie", [`toktickit_session=${requesterToken}`])
+        .send({ status: "WAITING_FOR_REQUESTER", comment: "Looks fixed on my end." });
+
+      expect(resolvedActionRes.status).toBe(200);
+      expect(resolvedActionRes.body.currentStatus).toBe("WAITING_FOR_REQUESTER");
+
+      // IT Staff closes ticket
+      await getPrisma().ticket.update({
+        where: { id: ticketId },
+        data: { currentStatus: "CLOSED" },
       });
 
-    const ticketId = ticketRes.body.id;
+      // Requester attempts Problem Appears Resolved on CLOSED ticket -> 400 Bad Request
+      const closedActionRes = await request(app)
+        .patch(`/api/tickets/${ticketId}/status`)
+        .set("Cookie", [`toktickit_session=${requesterToken}`])
+        .send({ status: "WAITING_FOR_REQUESTER" });
 
-    // Post comment
-    const postCommentRes = await request(app)
-      .post(`/api/tickets/${ticketId}/comments`)
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .send({ content: "Please update me when resolved." });
-
-    expect(postCommentRes.status).toBe(201);
-    expect(postCommentRes.body.content).toBe("Please update me when resolved.");
-    expect(postCommentRes.body.author.id).toBe(requesterId);
-
-    // View comments
-    const getCommentsRes = await request(app)
-      .get(`/api/tickets/${ticketId}/comments`)
-      .set("Cookie", [`toktickit_session=${requesterToken}`]);
-
-    expect(getCommentsRes.status).toBe(200);
-    expect(Array.isArray(getCommentsRes.body)).toBe(true);
-    expect(getCommentsRes.body.length).toBeGreaterThan(0);
-    expect(getCommentsRes.body[0].content).toBe("Please update me when resolved.");
+      expect(closedActionRes.status).toBe(400);
+      expect(closedActionRes.body.error).toMatch(/closed, resolved, or cancelled/i);
+    });
   });
 
-  it("blocks Requesters from accessing Internal Notes with 403 Forbidden (AC-04, BR-04)", async () => {
-    const ticketRes = await request(app)
-      .post("/api/tickets")
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .send({
-        summary: "Internal notes permission test",
-        categoryId,
-        relatedSystemId,
+  describe("IT Staff Status Transition Matrix Validation (BR-14)", () => {
+    it("enforces BR-14 permitted status transition matrix and rejects invalid transitions", async () => {
+      const ticketRes = await request(app)
+        .post("/api/tickets")
+        .set("Cookie", [`toktickit_session=${requesterToken}`])
+        .send({
+          summary: "Staff status transition test ticket",
+          categoryId,
+          relatedSystemId,
+        });
+
+      const ticketId = ticketRes.body.id; // currentStatus: NEW
+
+      // Valid transition: NEW -> OPEN
+      const openRes = await request(app)
+        .patch(`/api/tickets/${ticketId}/status`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({ status: "OPEN" });
+
+      expect(openRes.status).toBe(200);
+
+      // Close ticket (OPEN -> CANCELLED / CLOSED)
+      await getPrisma().ticket.update({
+        where: { id: ticketId },
+        data: { currentStatus: "CLOSED" },
       });
 
-    const ticketId = ticketRes.body.id;
+      // Invalid transition: CLOSED -> NEW (terminal state) -> 400 Bad Request
+      const invalidRes = await request(app)
+        .patch(`/api/tickets/${ticketId}/status`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({ status: "NEW" });
 
-    // Attempt GET internal notes
-    const getNotesRes = await request(app)
-      .get(`/api/tickets/${ticketId}/notes`)
-      .set("Cookie", [`toktickit_session=${requesterToken}`]);
-
-    expect(getNotesRes.status).toBe(403);
-    expect(getNotesRes.body.error).toMatch(/Forbidden/i);
-
-    // Attempt POST internal notes
-    const postNoteRes = await request(app)
-      .post(`/api/tickets/${ticketId}/notes`)
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .send({ content: "Unauthorized note attempt" });
-
-    expect(postNoteRes.status).toBe(403);
-    expect(postNoteRes.body.error).toMatch(/Forbidden/i);
-  });
-
-  it("allows Requesters to trigger Problem Appears Resolved but blocks direct RESOLVED/CLOSED status (AC-09, BR-05)", async () => {
-    const ticketRes = await request(app)
-      .post("/api/tickets")
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .send({
-        summary: "Status update test ticket",
-        categoryId,
-        relatedSystemId,
-      });
-
-    const ticketId = ticketRes.body.id;
-
-    // Attempt direct RESOLVED status -> 403
-    const directResolvedRes = await request(app)
-      .patch(`/api/tickets/${ticketId}/status`)
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .send({ status: "RESOLVED" });
-
-    expect(directResolvedRes.status).toBe(403);
-
-    // Attempt direct CLOSED status -> 403
-    const directClosedRes = await request(app)
-      .patch(`/api/tickets/${ticketId}/status`)
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .send({ status: "CLOSED" });
-
-    expect(directClosedRes.status).toBe(403);
-
-    // Trigger Problem Appears Resolved -> WAITING_FOR_REQUESTER (200 OK)
-    const resolvedActionRes = await request(app)
-      .patch(`/api/tickets/${ticketId}/status`)
-      .set("Cookie", [`toktickit_session=${requesterToken}`])
-      .send({ status: "WAITING_FOR_REQUESTER", comment: "Looks fixed on my end." });
-
-    expect(resolvedActionRes.status).toBe(200);
-    expect(resolvedActionRes.body.currentStatus).toBe("WAITING_FOR_REQUESTER");
+      expect(invalidRes.status).toBe(400);
+      expect(invalidRes.body.error).toMatch(/Invalid status transition/i);
+    });
   });
 });

@@ -28,37 +28,36 @@ app.use(express.json());
 
 app.use("/api/auth", authRouter);
 
-// Helper to resolve authenticated user from session cookie/header or fallback header
+// Helper to resolve authenticated user strictly from active session
 async function resolveAuthUser(req: Request) {
   const token = sessionStore.extractToken(req);
-  if (token) {
-    const session = sessionStore.getSession(token);
-    if (session) {
-      const user = await getPrisma().user.findUnique({ where: { id: session.userId } });
-      if (user && user.isActive) {
-        return user;
-      }
-    }
-  }
-  const xRequesterId = req.headers["x-requester-id"] as string;
-  if (xRequesterId) {
-    const user = await getPrisma().user.findUnique({ where: { id: xRequesterId } });
-    if (user && user.isActive) {
-      return user;
-    }
-    return {
-      id: xRequesterId,
-      name: "Requester User",
-      email: "requester@toktickit.com",
-      role: Role.REQUESTER,
-      isActive: true,
-      mustChangePassword: false,
-      passwordHash: "",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-  }
-  return null;
+  if (!token) return null;
+
+  const session = sessionStore.getSession(token);
+  if (!session) return null;
+
+  const user = await getPrisma().user.findUnique({ where: { id: session.userId } });
+  if (!user || !user.isActive) return null;
+
+  return user;
+}
+
+// Permitted Ticket Status Transitions Matrix (BR-14)
+const PERMITTED_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
+  [TicketStatus.NEW]: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.CANCELLED],
+  [TicketStatus.OPEN]: [TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
+  [TicketStatus.IN_PROGRESS]: [TicketStatus.WAITING_FOR_REQUESTER, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
+  [TicketStatus.WAITING_FOR_REQUESTER]: [TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
+  [TicketStatus.RESOLVED]: [TicketStatus.CLOSED, TicketStatus.REOPENED],
+  [TicketStatus.REOPENED]: [TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED],
+  [TicketStatus.CLOSED]: [],
+  [TicketStatus.CANCELLED]: [],
+};
+
+function isValidStatusTransition(currentStatus: TicketStatus, targetStatus: TicketStatus): boolean {
+  if (currentStatus === targetStatus) return true;
+  const allowed = PERMITTED_STATUS_TRANSITIONS[currentStatus];
+  return allowed ? allowed.includes(targetStatus) : false;
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -122,7 +121,7 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   try {
     const authUser = await resolveAuthUser(req);
     if (!authUser) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const requesterId = authUser.id;
@@ -184,7 +183,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
   try {
     const authUser = await resolveAuthUser(req);
     if (!authUser) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const page = Math.max(1, parseInt((req.query.page as string) || "1", 10));
@@ -272,7 +271,7 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
   try {
     const authUser = await resolveAuthUser(req);
     if (!authUser) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id } = req.params;
@@ -343,6 +342,11 @@ app.patch("/api/tickets/:id/status", async (req: Request, res: Response) => {
 
       // AC-09: Problem Appears Resolved action updates status to WAITING_FOR_REQUESTER
       if (status === "WAITING_FOR_REQUESTER") {
+        const activeStates = [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER];
+        if (!activeStates.includes(ticket.currentStatus)) {
+          return res.status(400).json({ error: "Cannot request resolution on closed, resolved, or cancelled tickets" });
+        }
+
         const updated = await getPrisma().ticket.update({
           where: { id },
           data: { currentStatus: TicketStatus.WAITING_FOR_REQUESTER },
@@ -368,11 +372,16 @@ app.patch("/api/tickets/:id/status", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid status transition for Requester" });
     }
 
-    // IT Staff / Admin workflow transitions
+    // IT Staff / Admin workflow transitions (BR-14 validation)
     if (status && Object.values(TicketStatus).includes(status as TicketStatus)) {
+      const targetStatus = status as TicketStatus;
+      if (!isValidStatusTransition(ticket.currentStatus, targetStatus)) {
+        return res.status(400).json({ error: "Invalid status transition" });
+      }
+
       const updated = await getPrisma().ticket.update({
         where: { id },
-        data: { currentStatus: status as TicketStatus },
+        data: { currentStatus: targetStatus },
       });
 
       return res.status(200).json({
@@ -545,7 +554,7 @@ app.post("/api/tickets/:id/attachments", upload.single("file"), async (req: Requ
   try {
     const authUser = await resolveAuthUser(req);
     if (!authUser) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id: ticketId } = req.params;
@@ -621,7 +630,7 @@ app.get("/api/attachments/:id/metadata", async (req: Request, res: Response) => 
   try {
     const authUser = await resolveAuthUser(req);
     if (!authUser) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id } = req.params;
@@ -660,7 +669,7 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
   try {
     const authUser = await resolveAuthUser(req);
     if (!authUser) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id } = req.params;
@@ -700,7 +709,7 @@ app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
   try {
     const authUser = await resolveAuthUser(req);
     if (!authUser) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id } = req.params;
