@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { checkSystem, Category } from "./api";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { RequesterProvider } from "./context/RequesterContext";
 import { Header } from "./components/Header";
 import { Login } from "./pages/Login";
 import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { CreateTicket } from "./components/CreateTicket";
 import { MyTickets } from "./components/MyTickets";
-import { TicketDetail } from "./components/TicketDetail";
+import { RequesterTicketDetail } from "./pages/RequesterTicketDetail";
 
 type UiState = "idle" | "loading" | "success" | "error";
 
@@ -85,7 +84,7 @@ function MainContent() {
 
       <main>
         {activeTab === "ticket-detail" && selectedTicketId ? (
-          <TicketDetail ticketId={selectedTicketId} onBack={handleBackToMyTickets} />
+          <RequesterTicketDetail ticketId={selectedTicketId} onBack={handleBackToMyTickets} />
         ) : activeTab === "create-ticket" ? (
           <CreateTicket onSuccess={handleBackToMyTickets} onCancel={handleBackToMyTickets} />
         ) : activeTab === "user-management" ? (
@@ -167,9 +166,7 @@ function MainContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <RequesterProvider>
-        <MainContent />
-      </RequesterProvider>
+      <MainContent />
     </AuthProvider>
   );
 }

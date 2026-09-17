@@ -6,8 +6,8 @@ import fs from "fs";
 import { getPrisma } from "./prisma.js";
 import { generateTicketNumber } from "./utils/ticketNumber.js";
 import { RequestedPriority, ITPriority, TicketStatus, Role } from "@prisma/client";
-
 import { authRouter } from "./routes/auth.js";
+import { sessionStore } from "./services/sessionStore.js";
 
 // Ensure uploads folder exists
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -27,6 +27,38 @@ app.use(
 app.use(express.json());
 
 app.use("/api/auth", authRouter);
+
+// Helper to resolve authenticated user strictly from active session
+async function resolveAuthUser(req: Request) {
+  const token = sessionStore.extractToken(req);
+  if (!token) return null;
+
+  const session = sessionStore.getSession(token);
+  if (!session) return null;
+
+  const user = await getPrisma().user.findUnique({ where: { id: session.userId } });
+  if (!user || !user.isActive) return null;
+
+  return user;
+}
+
+// Permitted Ticket Status Transitions Matrix (BR-14)
+const PERMITTED_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
+  [TicketStatus.NEW]: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.CANCELLED],
+  [TicketStatus.OPEN]: [TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
+  [TicketStatus.IN_PROGRESS]: [TicketStatus.WAITING_FOR_REQUESTER, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
+  [TicketStatus.WAITING_FOR_REQUESTER]: [TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
+  [TicketStatus.RESOLVED]: [TicketStatus.CLOSED, TicketStatus.REOPENED],
+  [TicketStatus.REOPENED]: [TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED],
+  [TicketStatus.CLOSED]: [],
+  [TicketStatus.CANCELLED]: [],
+};
+
+function isValidStatusTransition(currentStatus: TicketStatus, targetStatus: TicketStatus): boolean {
+  if (currentStatus === targetStatus) return true;
+  const allowed = PERMITTED_STATUS_TRANSITIONS[currentStatus];
+  return allowed ? allowed.includes(targetStatus) : false;
+}
 
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
@@ -84,13 +116,15 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
   }
 });
 
+// Create Ticket
 app.post("/api/tickets", async (req: Request, res: Response) => {
   try {
-    const requesterId = req.headers["x-requester-id"] as string;
-    if (!requesterId) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
+    const requesterId = authUser.id;
     const { summary, description, categoryId, relatedSystemId, requestedPriority } = req.body;
 
     const details: string[] = [];
@@ -144,11 +178,12 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   }
 });
 
+// List Tickets
 app.get("/api/tickets", async (req: Request, res: Response) => {
   try {
-    const requesterId = req.headers["x-requester-id"] as string;
-    if (!requesterId) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const page = Math.max(1, parseInt((req.query.page as string) || "1", 10));
@@ -160,9 +195,10 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     const sortBy = (req.query.sortBy as string) === "requestedPriority" ? "requestedPriority" : "createdAt";
     const order = (req.query.order as string) === "asc" ? "asc" : "desc";
 
-    const where: any = {
-      requesterId,
-    };
+    const where: any = {};
+    if (authUser.role === Role.REQUESTER) {
+      where.requesterId = authUser.id;
+    }
 
     if (categoryId) {
       where.categoryId = categoryId;
@@ -172,7 +208,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       where.relatedSystemId = relatedSystemId;
     }
 
-    if (status && ["NEW", "IN_PROGRESS", "RESOLVED", "CLOSED"].includes(status)) {
+    if (status && ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"].includes(status)) {
       where.currentStatus = status as TicketStatus;
     }
 
@@ -230,12 +266,12 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
   }
 });
 
-// EP-06: Requester Ticket Detail View Endpoint
+// Single Ticket Detail View
 app.get("/api/tickets/:id", async (req: Request, res: Response) => {
   try {
-    const requesterId = req.headers["x-requester-id"] as string;
-    if (!requesterId) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id } = req.params;
@@ -261,7 +297,11 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
       },
     });
 
-    if (!ticket || ticket.requesterId !== requesterId) {
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found or access denied" });
+    }
+
+    if (authUser.role === Role.REQUESTER && ticket.requesterId !== authUser.id) {
       return res.status(404).json({ error: "Ticket not found or access denied" });
     }
 
@@ -271,12 +311,250 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
   }
 });
 
-// EP-07: Attachment Upload Endpoint
+// Update Ticket Status (PATCH /api/tickets/:id/status)
+app.patch("/api/tickets/:id/status", async (req: Request, res: Response) => {
+  try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { id } = req.params;
+    const { status, comment } = req.body || {};
+
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    if (authUser.role === Role.REQUESTER) {
+      if (ticket.requesterId !== authUser.id) {
+        return res.status(403).json({ error: "Access denied to unowned ticket" });
+      }
+
+      // BR-05: Requesters cannot directly set status to RESOLVED or CLOSED
+      if (status === "RESOLVED" || status === "CLOSED") {
+        return res.status(403).json({ error: "Requesters cannot set ticket status to RESOLVED or CLOSED" });
+      }
+
+      // AC-09: Problem Appears Resolved action updates status to WAITING_FOR_REQUESTER
+      if (status === "WAITING_FOR_REQUESTER") {
+        const activeStates = [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER];
+        if (!activeStates.includes(ticket.currentStatus)) {
+          return res.status(400).json({ error: "Cannot request resolution on closed, resolved, or cancelled tickets" });
+        }
+
+        const updated = await getPrisma().ticket.update({
+          where: { id },
+          data: { currentStatus: TicketStatus.WAITING_FOR_REQUESTER },
+        });
+
+        if (comment && typeof comment === "string" && comment.trim()) {
+          await getPrisma().publicComment.create({
+            data: {
+              ticketId: id,
+              authorId: authUser.id,
+              content: comment.trim(),
+            },
+          });
+        }
+
+        return res.status(200).json({
+          message: "Ticket status updated",
+          ticketId: updated.id,
+          currentStatus: updated.currentStatus,
+        });
+      }
+
+      return res.status(400).json({ error: "Invalid status transition for Requester" });
+    }
+
+    // IT Staff / Admin workflow transitions (BR-14 validation)
+    if (status && Object.values(TicketStatus).includes(status as TicketStatus)) {
+      const targetStatus = status as TicketStatus;
+      if (!isValidStatusTransition(ticket.currentStatus, targetStatus)) {
+        return res.status(400).json({ error: "Invalid status transition" });
+      }
+
+      const updated = await getPrisma().ticket.update({
+        where: { id },
+        data: { currentStatus: targetStatus },
+      });
+
+      return res.status(200).json({
+        message: "Ticket status updated",
+        ticketId: updated.id,
+        currentStatus: updated.currentStatus,
+      });
+    }
+
+    return res.status(400).json({ error: "Invalid status transition" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update status" });
+  }
+});
+
+// GET /api/tickets/:id/comments
+app.get("/api/tickets/:id/comments", async (req: Request, res: Response) => {
+  try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { id } = req.params;
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id },
+      select: { requesterId: true },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    if (authUser.role === Role.REQUESTER && ticket.requesterId !== authUser.id) {
+      return res.status(403).json({ error: "Access denied to unowned ticket comments" });
+    }
+
+    const comments = await getPrisma().publicComment.findMany({
+      where: { ticketId: id },
+      orderBy: { createdAt: "asc" },
+      include: {
+        author: { select: { id: true, name: true, role: true } },
+      },
+    });
+
+    res.status(200).json(comments);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch comments" });
+  }
+});
+
+// POST /api/tickets/:id/comments
+app.post("/api/tickets/:id/comments", async (req: Request, res: Response) => {
+  try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { id } = req.params;
+    const { content } = req.body || {};
+
+    if (!content || typeof content !== "string" || content.trim().length === 0) {
+      return res.status(400).json({ error: "Comment content cannot be empty" });
+    }
+
+    if (content.trim().length > 2000) {
+      return res.status(400).json({ error: "Comment content must be 2,000 characters or less" });
+    }
+
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id },
+      select: { requesterId: true },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    if (authUser.role === Role.REQUESTER && ticket.requesterId !== authUser.id) {
+      return res.status(403).json({ error: "Access denied to unowned ticket comments" });
+    }
+
+    const comment = await getPrisma().publicComment.create({
+      data: {
+        ticketId: id,
+        authorId: authUser.id,
+        content: content.trim(),
+      },
+      include: {
+        author: { select: { id: true, name: true, role: true } },
+      },
+    });
+
+    res.status(201).json(comment);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to post comment" });
+  }
+});
+
+// GET /api/tickets/:id/notes (AC-04: 403 Forbidden for Requesters)
+app.get("/api/tickets/:id/notes", async (req: Request, res: Response) => {
+  try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (authUser.role === Role.REQUESTER) {
+      return res.status(403).json({ error: "Forbidden: Internal notes restricted to IT Staff and Administrators" });
+    }
+
+    const { id } = req.params;
+    const notes = await getPrisma().internalNote.findMany({
+      where: { ticketId: id },
+      orderBy: { createdAt: "asc" },
+      include: {
+        author: { select: { id: true, name: true, role: true } },
+      },
+    });
+
+    res.status(200).json(notes);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch notes" });
+  }
+});
+
+// POST /api/tickets/:id/notes (AC-04: 403 Forbidden for Requesters)
+app.post("/api/tickets/:id/notes", async (req: Request, res: Response) => {
+  try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (authUser.role === Role.REQUESTER) {
+      return res.status(403).json({ error: "Forbidden: Internal notes restricted to IT Staff and Administrators" });
+    }
+
+    const { id } = req.params;
+    const { content } = req.body || {};
+
+    if (!content || typeof content !== "string" || content.trim().length === 0) {
+      return res.status(400).json({ error: "Note content cannot be empty" });
+    }
+
+    if (content.trim().length > 2000) {
+      return res.status(400).json({ error: "Note content must be 2,000 characters or less" });
+    }
+
+    const note = await getPrisma().internalNote.create({
+      data: {
+        ticketId: id,
+        authorId: authUser.id,
+        content: content.trim(),
+      },
+      include: {
+        author: { select: { id: true, name: true, role: true } },
+      },
+    });
+
+    res.status(201).json(note);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to post note" });
+  }
+});
+
+// Attachment Upload Endpoint
 app.post("/api/tickets/:id/attachments", upload.single("file"), async (req: Request, res: Response) => {
   try {
-    const requesterId = req.headers["x-requester-id"] as string;
-    if (!requesterId) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id: ticketId } = req.params;
@@ -285,7 +563,11 @@ app.post("/api/tickets/:id/attachments", upload.single("file"), async (req: Requ
       select: { requesterId: true },
     });
 
-    if (!ticket || ticket.requesterId !== requesterId) {
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found or access denied" });
+    }
+
+    if (authUser.role === Role.REQUESTER && ticket.requesterId !== authUser.id) {
       return res.status(404).json({ error: "Ticket not found or access denied" });
     }
 
@@ -343,12 +625,12 @@ app.post("/api/tickets/:id/attachments", upload.single("file"), async (req: Requ
   }
 });
 
-// EP-08: Attachment Metadata Retrieval Endpoint
+// Attachment Metadata Endpoint
 app.get("/api/attachments/:id/metadata", async (req: Request, res: Response) => {
   try {
-    const requesterId = req.headers["x-requester-id"] as string;
-    if (!requesterId) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id } = req.params;
@@ -359,7 +641,11 @@ app.get("/api/attachments/:id/metadata", async (req: Request, res: Response) => 
       },
     });
 
-    if (!attachment || attachment.ticket.requesterId !== requesterId) {
+    if (!attachment) {
+      return res.status(404).json({ error: "Attachment not found or access denied" });
+    }
+
+    if (authUser.role === Role.REQUESTER && attachment.ticket.requesterId !== authUser.id) {
       return res.status(404).json({ error: "Attachment not found or access denied" });
     }
 
@@ -378,12 +664,12 @@ app.get("/api/attachments/:id/metadata", async (req: Request, res: Response) => 
   }
 });
 
-// EP-09: Attachment Download Endpoint
+// Attachment Download Endpoint
 app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
   try {
-    const requesterId = req.headers["x-requester-id"] as string;
-    if (!requesterId) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id } = req.params;
@@ -394,7 +680,11 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
       },
     });
 
-    if (!attachment || attachment.ticket.requesterId !== requesterId) {
+    if (!attachment) {
+      return res.status(404).json({ error: "Attachment not found or access denied" });
+    }
+
+    if (authUser.role === Role.REQUESTER && attachment.ticket.requesterId !== authUser.id) {
       return res.status(404).json({ error: "Attachment not found or access denied" });
     }
 
@@ -414,12 +704,12 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
   }
 });
 
-// EP-10: Soft-remove Attachment Endpoint
+// Soft-remove Attachment Endpoint
 app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
   try {
-    const requesterId = req.headers["x-requester-id"] as string;
-    if (!requesterId) {
-      return res.status(400).json({ error: "X-Requester-Id header is required" });
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const { id } = req.params;
@@ -436,7 +726,11 @@ app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
       },
     });
 
-    if (!attachment || attachment.ticket.requesterId !== requesterId) {
+    if (!attachment) {
+      return res.status(404).json({ error: "Attachment not found or access denied" });
+    }
+
+    if (authUser.role === Role.REQUESTER && attachment.ticket.requesterId !== authUser.id) {
       return res.status(404).json({ error: "Attachment not found or access denied" });
     }
 

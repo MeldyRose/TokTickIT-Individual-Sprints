@@ -29,7 +29,7 @@ export interface RequesterUser {
 }
 
 export type Priority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-export type TicketStatus = "NEW" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+export type TicketStatus = "NEW" | "OPEN" | "IN_PROGRESS" | "WAITING_FOR_REQUESTER" | "RESOLVED" | "CLOSED" | "REOPENED" | "CANCELLED";
 
 export interface Ticket {
   id: string;
@@ -77,6 +77,18 @@ export interface AttachmentMetadata {
   removalReason?: string | null;
 }
 
+export interface PublicComment {
+  id: string;
+  ticketId?: string;
+  content: string;
+  author: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  createdAt: string;
+}
+
 export interface TicketDetail {
   id: string;
   ticketNumber: string;
@@ -104,7 +116,7 @@ export interface SystemStatus {
 export async function checkSystem(): Promise<SystemStatus> {
   let healthRes: Response;
   try {
-    healthRes = await fetch(`${API_URL}/api/health`);
+    healthRes = await fetch(`${API_URL}/api/health`, { credentials: "include" });
   } catch {
     throw new Error("Unable to connect to TokTickIT API");
   }
@@ -115,7 +127,7 @@ export async function checkSystem(): Promise<SystemStatus> {
 
   let categoriesRes: Response;
   try {
-    categoriesRes = await fetch(`${API_URL}/api/categories`);
+    categoriesRes = await fetch(`${API_URL}/api/categories`, { credentials: "include" });
   } catch {
     throw new Error("Unable to connect to TokTickIT API");
   }
@@ -129,33 +141,36 @@ export async function checkSystem(): Promise<SystemStatus> {
 }
 
 export async function fetchCategories(): Promise<Category[]> {
-  const res = await fetch(`${API_URL}/api/categories`);
+  const res = await fetch(`${API_URL}/api/categories`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch categories");
   return res.json();
 }
 
 export async function fetchRequesters(): Promise<RequesterUser[]> {
-  const res = await fetch(`${API_URL}/api/requesters`);
+  const res = await fetch(`${API_URL}/api/requesters`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch requesters");
   return res.json();
 }
 
 export async function fetchRelatedSystems(): Promise<RelatedSystem[]> {
-  const res = await fetch(`${API_URL}/api/related-systems`);
+  const res = await fetch(`${API_URL}/api/related-systems`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch related systems");
   return res.json();
 }
 
 export async function createTicket(
   payload: CreateTicketPayload,
-  requesterId: string
+  requesterId?: string
 ): Promise<Ticket> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (requesterId) headers["X-Requester-Id"] = requesterId;
+
   const res = await fetch(`${API_URL}/api/tickets`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requester-Id": requesterId,
-    },
+    headers,
+    credentials: "include",
     body: JSON.stringify(payload),
   });
 
@@ -179,7 +194,7 @@ export async function fetchMyTickets(
     sortBy?: string;
     order?: string;
   },
-  requesterId: string
+  requesterId?: string
 ): Promise<TicketListResponse> {
   const query = new URLSearchParams();
   if (params.page) query.append("page", params.page.toString());
@@ -191,10 +206,12 @@ export async function fetchMyTickets(
   if (params.sortBy) query.append("sortBy", params.sortBy);
   if (params.order) query.append("order", params.order);
 
+  const headers: Record<string, string> = {};
+  if (requesterId) headers["X-Requester-Id"] = requesterId;
+
   const res = await fetch(`${API_URL}/api/tickets?${query.toString()}`, {
-    headers: {
-      "X-Requester-Id": requesterId,
-    },
+    headers,
+    credentials: "include",
   });
 
   if (!res.ok) {
@@ -204,11 +221,13 @@ export async function fetchMyTickets(
   return res.json();
 }
 
-export async function fetchTicketDetail(id: string, requesterId: string): Promise<TicketDetail> {
+export async function fetchTicketDetail(id: string, requesterId?: string): Promise<TicketDetail> {
+  const headers: Record<string, string> = {};
+  if (requesterId) headers["X-Requester-Id"] = requesterId;
+
   const res = await fetch(`${API_URL}/api/tickets/${id}`, {
-    headers: {
-      "X-Requester-Id": requesterId,
-    },
+    headers,
+    credentials: "include",
   });
 
   const json = await res.json();
@@ -219,19 +238,60 @@ export async function fetchTicketDetail(id: string, requesterId: string): Promis
   return json;
 }
 
+export async function fetchPublicComments(ticketId: string): Promise<PublicComment[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.error || "Failed to fetch comments");
+  }
+  return res.json();
+}
+
+export async function postPublicComment(ticketId: string, content: string): Promise<PublicComment> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Failed to post comment");
+  return json;
+}
+
+export async function updateRequesterTicketStatus(
+  ticketId: string,
+  status: string,
+  comment?: string
+): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus }> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ status, comment }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Failed to update status");
+  return json;
+}
+
 export async function uploadAttachment(
   ticketId: string,
   file: File,
-  requesterId: string
+  requesterId?: string
 ): Promise<AttachmentMetadata> {
   const formData = new FormData();
   formData.append("file", file);
 
+  const headers: Record<string, string> = {};
+  if (requesterId) headers["X-Requester-Id"] = requesterId;
+
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
     method: "POST",
-    headers: {
-      "X-Requester-Id": requesterId,
-    },
+    headers,
+    credentials: "include",
     body: formData,
   });
 
@@ -245,12 +305,14 @@ export async function uploadAttachment(
 
 export async function getAttachmentMetadata(
   id: string,
-  requesterId: string
+  requesterId?: string
 ): Promise<AttachmentMetadata> {
+  const headers: Record<string, string> = {};
+  if (requesterId) headers["X-Requester-Id"] = requesterId;
+
   const res = await fetch(`${API_URL}/api/attachments/${id}/metadata`, {
-    headers: {
-      "X-Requester-Id": requesterId,
-    },
+    headers,
+    credentials: "include",
   });
 
   const json = await res.json();
@@ -264,12 +326,14 @@ export async function getAttachmentMetadata(
 export async function downloadAttachment(
   id: string,
   fileName: string,
-  requesterId: string
+  requesterId?: string
 ): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (requesterId) headers["X-Requester-Id"] = requesterId;
+
   const res = await fetch(`${API_URL}/api/attachments/${id}/download`, {
-    headers: {
-      "X-Requester-Id": requesterId,
-    },
+    headers,
+    credentials: "include",
   });
 
   if (!res.ok) {
@@ -291,14 +355,17 @@ export async function downloadAttachment(
 export async function softRemoveAttachment(
   id: string,
   removalReason: string,
-  requesterId: string
+  requesterId?: string
 ): Promise<AttachmentMetadata> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (requesterId) headers["X-Requester-Id"] = requesterId;
+
   const res = await fetch(`${API_URL}/api/attachments/${id}`, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requester-Id": requesterId,
-    },
+    headers,
+    credentials: "include",
     body: JSON.stringify({ removalReason }),
   });
 
@@ -340,16 +407,36 @@ export async function logoutUser(): Promise<void> {
 }
 
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  const res = await fetch(`${API_URL}/api/auth/me`, {
-    credentials: "include",
-  });
+  try {
+    const res = await fetch(`${API_URL}/api/auth/me`, {
+      credentials: "include",
+    });
 
-  if (!res.ok) {
-    return null;
+    if (res.ok) {
+      const json = await res.json();
+      return json.user || null;
+    }
+  } catch {
+    // ignore
   }
 
-  const json = await res.json();
-  return json.user || null;
+  const activeReq = typeof localStorage !== "undefined" ? localStorage.getItem("toktickit_active_requester") : null;
+  if (activeReq) {
+    try {
+      const parsed = JSON.parse(activeReq);
+      return {
+        id: parsed.id,
+        name: parsed.name,
+        email: parsed.email,
+        role: "REQUESTER",
+        mustChangePassword: false,
+      };
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
 }
 
 export async function changePasswordUser(

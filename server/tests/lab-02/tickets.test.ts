@@ -1,48 +1,92 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
+import { getPrisma } from "../../src/prisma.js";
+import bcrypt from "bcryptjs";
 
-describe("Ticket API Endpoints (Issue 4)", () => {
+describe("Ticket API Endpoints (Issue 4 & 16)", () => {
+  let requesterAToken = "";
   let requesterAId = "";
+  let requesterBToken = "";
   let requesterBId = "";
   let categoryId = "";
   let relatedSystemId = "";
 
   beforeEach(async () => {
-    // Get active requesters
-    const reqRes = await request(app).get("/api/requesters");
-    if (reqRes.body.length >= 2) {
-      requesterAId = reqRes.body[0].id;
-      requesterBId = reqRes.body[1].id;
+    const pwdHash = bcrypt.hashSync("Password123!", 10);
+
+    let userA = await getPrisma().user.findUnique({ where: { email: "jennifer.lab2@toktickit.com" } });
+    if (!userA) {
+      userA = await getPrisma().user.create({
+        data: {
+          name: "Jennifer Lab2",
+          email: "jennifer.lab2@toktickit.com",
+          passwordHash: pwdHash,
+          role: "REQUESTER",
+          isActive: true,
+          mustChangePassword: false,
+        },
+      });
+    }
+    requesterAId = userA.id;
+
+    let userB = await getPrisma().user.findUnique({ where: { email: "michael.lab2@toktickit.com" } });
+    if (!userB) {
+      userB = await getPrisma().user.create({
+        data: {
+          name: "Michael Lab2",
+          email: "michael.lab2@toktickit.com",
+          passwordHash: pwdHash,
+          role: "REQUESTER",
+          isActive: true,
+          mustChangePassword: false,
+        },
+      });
+    }
+    requesterBId = userB.id;
+
+    // Login Requester A
+    const loginA = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "jennifer.lab2@toktickit.com", password: "Password123!" });
+    const cookieA = loginA.headers["set-cookie"];
+    if (cookieA) {
+      const match = cookieA[0].match(/toktickit_session=([^;]+)/);
+      if (match) requesterAToken = match[1];
     }
 
-    // Get active category and related system
-    const catRes = await request(app).get("/api/categories");
-    if (catRes.body.length > 0) {
-      categoryId = catRes.body[0].id;
+    // Login Requester B
+    const loginB = await request(app)
+      .post("/api/auth/login")
+      .send({ email: "michael.lab2@toktickit.com", password: "Password123!" });
+    const cookieB = loginB.headers["set-cookie"];
+    if (cookieB) {
+      const match = cookieB[0].match(/toktickit_session=([^;]+)/);
+      if (match) requesterBToken = match[1];
     }
+
+    const catRes = await request(app).get("/api/categories");
+    if (catRes.body.length > 0) categoryId = catRes.body[0].id;
 
     const sysRes = await request(app).get("/api/related-systems");
-    if (sysRes.body.length > 0) {
-      relatedSystemId = sysRes.body[0].id;
-    }
+    if (sysRes.body.length > 0) relatedSystemId = sysRes.body[0].id;
   });
 
   describe("POST /api/tickets (API-01, AC-01, BR-01, BR-06)", () => {
-    it("returns 400 Bad Request when X-Requester-Id header is missing", async () => {
+    it("returns 401 Unauthorized when session authentication is missing", async () => {
       const res = await request(app).post("/api/tickets").send({
         summary: "Laptop battery issue",
         categoryId,
         relatedSystemId,
       });
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/X-Requester-Id header is required/i);
+      expect(res.status).toBe(401);
+      expect(res.body.error).toMatch(/Unauthorized/i);
     });
 
     it("returns 400 Bad Request when mandatory fields are missing", async () => {
       const res = await request(app)
         .post("/api/tickets")
-        .set("X-Requester-Id", requesterAId)
+        .set("Cookie", [`toktickit_session=${requesterAToken}`])
         .send({
           summary: "",
           categoryId,
@@ -55,7 +99,7 @@ describe("Ticket API Endpoints (Issue 4)", () => {
     it("creates a ticket and returns 201 Created with official Ticket Number", async () => {
       const res = await request(app)
         .post("/api/tickets")
-        .set("X-Requester-Id", requesterAId)
+        .set("Cookie", [`toktickit_session=${requesterAToken}`])
         .send({
           summary: "Wi-Fi connection drops in Lab 3",
           description: "Experiencing frequent disconnects on the campus Wi-Fi network.",
@@ -76,27 +120,25 @@ describe("Ticket API Endpoints (Issue 4)", () => {
   });
 
   describe("GET /api/tickets (API-02, API-04, AC-04, AC-05, AC-06)", () => {
-    it("returns 400 Bad Request when X-Requester-Id header is missing", async () => {
+    it("returns 401 Unauthorized when session authentication is missing", async () => {
       const res = await request(app).get("/api/tickets");
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/X-Requester-Id header is required/i);
+      expect(res.status).toBe(401);
+      expect(res.body.error).toMatch(/Unauthorized/i);
     });
 
-    it("returns paginated tickets belonging strictly to X-Requester-Id (AC-04)", async () => {
-      // Create a ticket for Requester A
+    it("returns paginated tickets belonging strictly to authenticated session user (AC-04)", async () => {
       await request(app)
         .post("/api/tickets")
-        .set("X-Requester-Id", requesterAId)
+        .set("Cookie", [`toktickit_session=${requesterAToken}`])
         .send({
           summary: "Requester A Ticket Unique Test",
           categoryId,
           relatedSystemId,
         });
 
-      // Fetch tickets as Requester A
       const resA = await request(app)
         .get("/api/tickets")
-        .set("X-Requester-Id", requesterAId);
+        .set("Cookie", [`toktickit_session=${requesterAToken}`]);
 
       expect(resA.status).toBe(200);
       expect(resA.body).toHaveProperty("data");
@@ -106,10 +148,9 @@ describe("Ticket API Endpoints (Issue 4)", () => {
       const summariesA = resA.body.data.map((t: { summary: string }) => t.summary);
       expect(summariesA).toContain("Requester A Ticket Unique Test");
 
-      // Fetch tickets as Requester B (should NOT see Requester A's ticket)
       const resB = await request(app)
         .get("/api/tickets")
-        .set("X-Requester-Id", requesterBId);
+        .set("Cookie", [`toktickit_session=${requesterBToken}`]);
 
       expect(resB.status).toBe(200);
       const summariesB = resB.body.data.map((t: { summary: string }) => t.summary);
@@ -117,10 +158,9 @@ describe("Ticket API Endpoints (Issue 4)", () => {
     });
 
     it("supports search, filtering, and pagination", async () => {
-      // Create ticket for search
       const createdRes = await request(app)
         .post("/api/tickets")
-        .set("X-Requester-Id", requesterAId)
+        .set("Cookie", [`toktickit_session=${requesterAToken}`])
         .send({
           summary: "Printer paper jam in 4th floor office",
           categoryId,
@@ -129,10 +169,9 @@ describe("Ticket API Endpoints (Issue 4)", () => {
 
       const ticketNo = createdRes.body.ticketNumber;
 
-      // Search by ticket number
       const searchRes = await request(app)
         .get(`/api/tickets?search=${ticketNo}`)
-        .set("X-Requester-Id", requesterAId);
+        .set("Cookie", [`toktickit_session=${requesterAToken}`]);
 
       expect(searchRes.status).toBe(200);
       expect(searchRes.body.data.length).toBeGreaterThan(0);
