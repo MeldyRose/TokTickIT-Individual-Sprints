@@ -107,7 +107,7 @@ describe("IT Staff Ticket Queue API (Issue 17, AC-05, BR-21)", () => {
       expect(createRes.status).toBe(201);
 
       const searchRes = await request(app)
-        .get("/api/tickets?search=UniqueSearchTerm12345")
+        .get("/api/tickets?search=uniquesearchterm12345")
         .set("Cookie", [`toktickit_session=${staffToken}`]);
 
       expect(searchRes.status).toBe(200);

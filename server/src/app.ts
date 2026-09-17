@@ -220,9 +220,9 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
 
     if (search) {
       where.OR = [
-        { summary: { contains: search } },
-        { description: { contains: search } },
-        { ticketNumber: { contains: search } },
+        { summary: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { ticketNumber: { contains: search, mode: "insensitive" } },
       ];
     }
 
