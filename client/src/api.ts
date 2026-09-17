@@ -38,11 +38,17 @@ export interface Ticket {
   description?: string | null;
   categoryId: string;
   categoryName: string;
+  category?: { id: string; name: string };
   relatedSystemId: string;
   relatedSystemName: string;
+  relatedSystem?: { id: string; name: string };
   requestedPriority: Priority;
   itPriority: Priority;
   currentStatus: TicketStatus;
+  requesterId?: string;
+  requester?: { id: string; name: string; email: string } | null;
+  ownerId?: string | null;
+  owner?: { id: string; name: string; email: string } | null;
   createdAt: string;
   updatedAt: string;
   attachmentCount: number;
@@ -56,12 +62,33 @@ export interface CreateTicketPayload {
   requestedPriority?: Priority;
 }
 
+export interface TicketListParams {
+  page?: number;
+  limit?: number;
+  pageSize?: number;
+  search?: string;
+  categoryId?: string;
+  category?: string;
+  status?: string;
+  priority?: string;
+  itPriority?: string;
+  owner?: string;
+  ownerId?: string;
+  relatedSystemId?: string;
+  system?: string;
+  sortBy?: string;
+  order?: string;
+  sortOrder?: string;
+}
+
 export interface TicketListResponse {
   data: Ticket[];
   pagination: {
     page: number;
     limit: number;
+    pageSize?: number;
     totalItems: number;
+    totalCount?: number;
     totalPages: number;
   };
 }
@@ -183,28 +210,27 @@ export async function createTicket(
   return json;
 }
 
-export async function fetchMyTickets(
-  params: {
-    page?: number;
-    limit?: number;
-    search?: string;
-    categoryId?: string;
-    status?: string;
-    relatedSystemId?: string;
-    sortBy?: string;
-    order?: string;
-  },
+export async function fetchTickets(
+  params: TicketListParams = {},
   requesterId?: string
 ): Promise<TicketListResponse> {
   const query = new URLSearchParams();
   if (params.page) query.append("page", params.page.toString());
-  if (params.limit) query.append("limit", params.limit.toString());
+  const limitVal = params.pageSize || params.limit;
+  if (limitVal) query.append("pageSize", limitVal.toString());
   if (params.search) query.append("search", params.search);
-  if (params.categoryId) query.append("categoryId", params.categoryId);
+  const catVal = params.categoryId || params.category;
+  if (catVal) query.append("category", catVal);
   if (params.status) query.append("status", params.status);
-  if (params.relatedSystemId) query.append("relatedSystemId", params.relatedSystemId);
+  const prioVal = params.priority || params.itPriority;
+  if (prioVal) query.append("priority", prioVal);
+  const ownerVal = params.owner || params.ownerId;
+  if (ownerVal) query.append("owner", ownerVal);
+  const sysVal = params.relatedSystemId || params.system;
+  if (sysVal) query.append("system", sysVal);
   if (params.sortBy) query.append("sortBy", params.sortBy);
-  if (params.order) query.append("order", params.order);
+  const sortOrderVal = params.sortOrder || params.order;
+  if (sortOrderVal) query.append("sortOrder", sortOrderVal);
 
   const headers: Record<string, string> = {};
   if (requesterId) headers["X-Requester-Id"] = requesterId;
@@ -219,6 +245,22 @@ export async function fetchMyTickets(
   }
 
   return res.json();
+}
+
+export async function fetchMyTickets(
+  params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    categoryId?: string;
+    status?: string;
+    relatedSystemId?: string;
+    sortBy?: string;
+    order?: string;
+  },
+  requesterId?: string
+): Promise<TicketListResponse> {
+  return fetchTickets(params, requesterId);
 }
 
 export async function fetchTicketDetail(id: string, requesterId?: string): Promise<TicketDetail> {
@@ -274,6 +316,44 @@ export async function updateRequesterTicketStatus(
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || "Failed to update status");
+  return json;
+}
+
+export async function updateTicketStatus(
+  ticketId: string,
+  status: string,
+  comment?: string
+): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus }> {
+  return updateRequesterTicketStatus(ticketId, status, comment);
+}
+
+export async function claimOrReassignOwner(
+  ticketId: string,
+  ownerId?: string | null
+): Promise<{ message: string; ticketId: string; owner: { id: string; name: string; email: string } | null }> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/owner`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ ownerId }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Failed to update ticket ownership");
+  return json;
+}
+
+export async function updateItPriority(
+  ticketId: string,
+  itPriority: Priority
+): Promise<{ message: string; ticketId: string; itPriority: Priority }> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/priority`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ itPriority }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Failed to update IT Priority");
   return json;
 }
 
