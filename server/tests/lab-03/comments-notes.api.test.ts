@@ -12,35 +12,33 @@ describe("Public Comments & Internal Notes Validation API Tests (comments-notes.
   beforeEach(async () => {
     const passwordHash = bcrypt.hashSync("Password123!", 10);
 
-    // Create Staff User
-    let staffUser = await getPrisma().user.findUnique({ where: { email: "staff.cn19@toktickit.com" } });
-    if (!staffUser) {
-      staffUser = await getPrisma().user.create({
-        data: {
-          name: "Staff CN19",
-          email: "staff.cn19@toktickit.com",
-          passwordHash,
-          role: "IT_STAFF",
-          isActive: true,
-          mustChangePassword: false,
-        },
-      });
-    }
+    // Upsert Staff User
+    const staffUser = await getPrisma().user.upsert({
+      where: { email: "staff.cn19@toktickit.com" },
+      update: {},
+      create: {
+        name: "Staff CN19",
+        email: "staff.cn19@toktickit.com",
+        passwordHash,
+        role: "IT_STAFF",
+        isActive: true,
+        mustChangePassword: false,
+      },
+    });
 
-    // Create Requester User
-    let reqUser = await getPrisma().user.findUnique({ where: { email: "req.cn19@toktickit.com" } });
-    if (!reqUser) {
-      reqUser = await getPrisma().user.create({
-        data: {
-          name: "Req CN19",
-          email: "req.cn19@toktickit.com",
-          passwordHash,
-          role: "REQUESTER",
-          isActive: true,
-          mustChangePassword: false,
-        },
-      });
-    }
+    // Upsert Requester User
+    const reqUser = await getPrisma().user.upsert({
+      where: { email: "req.cn19@toktickit.com" },
+      update: {},
+      create: {
+        name: "Req CN19",
+        email: "req.cn19@toktickit.com",
+        passwordHash,
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: false,
+      },
+    });
 
     // Login Staff
     const loginStaff = await request(app)
@@ -78,7 +76,7 @@ describe("Public Comments & Internal Notes Validation API Tests (comments-notes.
 
     const ticket = await getPrisma().ticket.create({
       data: {
-        ticketNumber: `TKT-CN19-${Date.now()}`,
+        ticketNumber: `TKT-CN19-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         summary: "Comments and Notes Validation Ticket",
         description: "Testing payload validation limits for comments and notes",
         categoryId: category.id,

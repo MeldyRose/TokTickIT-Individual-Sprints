@@ -13,50 +13,47 @@ describe("Internal Notes RBAC Security API Tests (notes.api.test.ts - Issue 19, 
   beforeEach(async () => {
     const passwordHash = bcrypt.hashSync("Password123!", 10);
 
-    // Create IT Staff user
-    let staffUser = await getPrisma().user.findUnique({ where: { email: "staff.notes19@toktickit.com" } });
-    if (!staffUser) {
-      staffUser = await getPrisma().user.create({
-        data: {
-          name: "Staff Notes19",
-          email: "staff.notes19@toktickit.com",
-          passwordHash,
-          role: "IT_STAFF",
-          isActive: true,
-          mustChangePassword: false,
-        },
-      });
-    }
+    // Upsert IT Staff user
+    const staffUser = await getPrisma().user.upsert({
+      where: { email: "staff.notes19@toktickit.com" },
+      update: {},
+      create: {
+        name: "Staff Notes19",
+        email: "staff.notes19@toktickit.com",
+        passwordHash,
+        role: "IT_STAFF",
+        isActive: true,
+        mustChangePassword: false,
+      },
+    });
 
-    // Create Admin user
-    let adminUser = await getPrisma().user.findUnique({ where: { email: "admin.notes19@toktickit.com" } });
-    if (!adminUser) {
-      adminUser = await getPrisma().user.create({
-        data: {
-          name: "Admin Notes19",
-          email: "admin.notes19@toktickit.com",
-          passwordHash,
-          role: "ADMINISTRATOR",
-          isActive: true,
-          mustChangePassword: false,
-        },
-      });
-    }
+    // Upsert Admin user
+    const adminUser = await getPrisma().user.upsert({
+      where: { email: "admin.notes19@toktickit.com" },
+      update: {},
+      create: {
+        name: "Admin Notes19",
+        email: "admin.notes19@toktickit.com",
+        passwordHash,
+        role: "ADMINISTRATOR",
+        isActive: true,
+        mustChangePassword: false,
+      },
+    });
 
-    // Create Requester user
-    let reqUser = await getPrisma().user.findUnique({ where: { email: "req.notes19@toktickit.com" } });
-    if (!reqUser) {
-      reqUser = await getPrisma().user.create({
-        data: {
-          name: "Req Notes19",
-          email: "req.notes19@toktickit.com",
-          passwordHash,
-          role: "REQUESTER",
-          isActive: true,
-          mustChangePassword: false,
-        },
-      });
-    }
+    // Upsert Requester user
+    const reqUser = await getPrisma().user.upsert({
+      where: { email: "req.notes19@toktickit.com" },
+      update: {},
+      create: {
+        name: "Req Notes19",
+        email: "req.notes19@toktickit.com",
+        passwordHash,
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: false,
+      },
+    });
 
     // Login Staff
     const loginStaff = await request(app)
@@ -106,7 +103,7 @@ describe("Internal Notes RBAC Security API Tests (notes.api.test.ts - Issue 19, 
     // Create a test ticket owned by Requester
     const ticket = await getPrisma().ticket.create({
       data: {
-        ticketNumber: `TKT-NOTE19-${Date.now()}`,
+        ticketNumber: `TKT-NOTE19-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         summary: "Test Ticket for Notes Security",
         description: "Testing role restricted internal notes access",
         categoryId: category.id,

@@ -16,13 +16,11 @@ export const InternalNotesSection: React.FC<InternalNotesSectionProps> = ({ tick
   const [noteSubmitting, setNoteSubmitting] = useState<boolean>(false);
   const [noteError, setNoteError] = useState<string | null>(null);
 
-  // Security Scoping: Do NOT render for Requesters
-  if (!user || user.role === "REQUESTER") {
-    return null;
-  }
+  // Security Scoping: Internal Notes are for IT Staff and Administrators only
+  const isStaff = !!user && user.role !== "REQUESTER";
 
   useEffect(() => {
-    if (!ticketId) return;
+    if (!ticketId || !isStaff) return;
     setLoading(true);
     setError(null);
 
@@ -30,7 +28,7 @@ export const InternalNotesSection: React.FC<InternalNotesSectionProps> = ({ tick
       .then((data) => setNotes(data || []))
       .catch((err) => setError(err?.message || "Failed to load internal notes"))
       .finally(() => setLoading(false));
-  }, [ticketId]);
+  }, [ticketId, isStaff]);
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +52,11 @@ export const InternalNotesSection: React.FC<InternalNotesSectionProps> = ({ tick
       setNoteSubmitting(false);
     }
   };
+
+  // Never render Internal Notes into a Requester's DOM (BR-04)
+  if (!isStaff) {
+    return null;
+  }
 
   return (
     <div
