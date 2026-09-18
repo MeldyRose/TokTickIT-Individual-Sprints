@@ -116,6 +116,18 @@ export interface PublicComment {
   createdAt: string;
 }
 
+export interface InternalNote {
+  id: string;
+  ticketId?: string;
+  content: string;
+  author: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  createdAt: string;
+}
+
 export interface TicketDetail {
   id: string;
   ticketNumber: string;
@@ -300,6 +312,29 @@ export async function postPublicComment(ticketId: string, content: string): Prom
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || "Failed to post comment");
+  return json;
+}
+
+export async function fetchInternalNotes(ticketId: string): Promise<InternalNote[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/notes`, {
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json?.error || "Failed to fetch internal notes");
+  }
+  return res.json();
+}
+
+export async function postInternalNote(ticketId: string, content: string): Promise<InternalNote> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Failed to post internal note");
   return json;
 }
 
