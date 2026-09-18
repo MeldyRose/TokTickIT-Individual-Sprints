@@ -178,6 +178,10 @@ adminUsersRouter.patch("/:id", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    if (role !== undefined && !["REQUESTER", "IT_STAFF", "ADMINISTRATOR"].includes(role)) {
+      return res.status(400).json({ error: "Valid role is required (REQUESTER, IT_STAFF, or ADMINISTRATOR)" });
+    }
+
     // BR-17: Self-deactivation prevention
     if (authUser.id === targetUser.id && isActive === false) {
       return res.status(400).json({ error: "Self-deactivation is prohibited. You cannot deactivate your own logged-in account." });

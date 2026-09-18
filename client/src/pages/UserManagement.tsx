@@ -639,121 +639,147 @@ export const UserManagement: React.FC = () => {
       )}
 
       {/* EDIT USER MODAL */}
-      {editingUser && (
-        <div
-          className="modal d-block"
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="true"
-          style={{ backgroundColor: "rgba(0, 0, 0, 0.6)", backdropFilter: "blur(4px)" }}
-          data-testid="edit-user-modal"
-        >
-          <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: "520px" }}>
-            <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "12px" }}>
-              <div className="modal-header border-0 pb-0 pt-4 px-4 d-flex align-items-start justify-content-between">
-                <div>
-                  <h2 className="modal-title h5 fw-bold text-dark mb-1">Edit User Account</h2>
-                  <p className="small text-muted mb-0">Update account details, role, or active status.</p>
+      {editingUser && (() => {
+        const isSelfEdit = Boolean(
+          currentUser?.id === editingUser.id ||
+            (currentUser?.email && editingUser?.email && currentUser.email.toLowerCase() === editingUser.email.toLowerCase())
+        );
+        const activeAdminCount = users.filter((u) => u.role === "ADMINISTRATOR" && u.isActive).length;
+        const isLastActiveAdmin = editingUser.role === "ADMINISTRATOR" && editingUser.isActive && activeAdminCount <= 1;
+
+        return (
+          <div
+            className="modal d-block"
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            style={{ backgroundColor: "rgba(0, 0, 0, 0.6)", backdropFilter: "blur(4px)" }}
+            data-testid="edit-user-modal"
+          >
+            <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: "520px" }}>
+              <div className="modal-content border-0 shadow-lg" style={{ borderRadius: "12px" }}>
+                <div className="modal-header border-0 pb-0 pt-4 px-4 d-flex align-items-start justify-content-between">
+                  <div>
+                    <h2 className="modal-title h5 fw-bold text-dark mb-1">Edit User Account</h2>
+                    <p className="small text-muted mb-0">Update account details, role, or active status.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    aria-label="Close"
+                    onClick={handleCloseEditModal}
+                    data-testid="close-edit-modal-btn"
+                  ></button>
                 </div>
-                <button
-                  type="button"
-                  className="btn-close"
-                  aria-label="Close"
-                  onClick={handleCloseEditModal}
-                  data-testid="close-edit-modal-btn"
-                ></button>
-              </div>
 
-              <div className="modal-body p-4">
-                {editError && (
-                  <div
-                    className="alert border-0 small mb-3 py-2 px-3"
-                    style={{ backgroundColor: "#FFEBEE", color: "#C62828" }}
-                    role="alert"
-                    data-testid="edit-user-error-banner"
-                  >
-                    ⚠️ {editError}
-                  </div>
-                )}
-
-                <form onSubmit={handleEditSubmit} noValidate>
-                  <div className="mb-3">
-                    <label className="form-label small fw-semibold text-secondary">Full Name</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      required
-                      data-testid="edit-user-name-input"
-                    />
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label small fw-semibold text-secondary">Email Address</label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      value={editEmail}
-                      onChange={(e) => setEditEmail(e.target.value)}
-                      required
-                      data-testid="edit-user-email-input"
-                    />
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label small fw-semibold text-secondary">Role</label>
-                    <select
-                      className="form-select"
-                      value={editRole}
-                      onChange={(e) => setEditRole(e.target.value as UserRole)}
-                      data-testid="edit-user-role-select"
+                <div className="modal-body p-4">
+                  {editError && (
+                    <div
+                      className="alert border-0 small mb-3 py-2 px-3"
+                      style={{ backgroundColor: "#FFEBEE", color: "#C62828" }}
+                      role="alert"
+                      data-testid="edit-user-error-banner"
                     >
-                      <option value="REQUESTER">Requester</option>
-                      <option value="IT_STAFF">IT Staff</option>
-                      <option value="ADMINISTRATOR">Administrator</option>
-                    </select>
-                  </div>
+                      ⚠️ {editError}
+                    </div>
+                  )}
 
-                  <div className="mb-4 form-check form-switch">
-                    <input
-                      className="form-check-input"
-                      type="checkbox"
-                      id="editIsActive"
-                      checked={editIsActive}
-                      onChange={(e) => setEditIsActive(e.target.checked)}
-                      data-testid="edit-user-active-switch"
-                    />
-                    <label className="form-check-label small fw-semibold text-secondary" htmlFor="editIsActive">
-                      Account Active
-                    </label>
-                  </div>
+                  <form onSubmit={handleEditSubmit} noValidate>
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold text-secondary">Full Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        required
+                        data-testid="edit-user-name-input"
+                      />
+                    </div>
 
-                  <div className="d-flex gap-2 justify-content-end">
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary px-4"
-                      onClick={handleCloseEditModal}
-                      data-testid="cancel-edit-user-btn"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="btn text-white px-4 fw-semibold"
-                      style={{ backgroundColor: "#006B3C", borderColor: "#006B3C" }}
-                      disabled={isSubmittingEdit}
-                      data-testid="submit-edit-user-btn"
-                    >
-                      {isSubmittingEdit ? "Saving..." : "Save Changes"}
-                    </button>
-                  </div>
-                </form>
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold text-secondary">Email Address</label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        required
+                        data-testid="edit-user-email-input"
+                      />
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="form-label small fw-semibold text-secondary">Role</label>
+                      <select
+                        className="form-select"
+                        value={editRole}
+                        onChange={(e) => setEditRole(e.target.value as UserRole)}
+                        disabled={isLastActiveAdmin}
+                        data-testid="edit-user-role-select"
+                      >
+                        <option value="REQUESTER">Requester</option>
+                        <option value="IT_STAFF">IT Staff</option>
+                        <option value="ADMINISTRATOR">Administrator</option>
+                      </select>
+                      {isLastActiveAdmin && (
+                        <div className="form-text text-muted small mt-1">
+                          🔒 Cannot change role of the last active Administrator.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mb-4 form-check form-switch">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="editIsActive"
+                        checked={editIsActive}
+                        onChange={(e) => setEditIsActive(e.target.checked)}
+                        disabled={isSelfEdit || isLastActiveAdmin}
+                        data-testid="edit-user-active-switch"
+                      />
+                      <label className="form-check-label small fw-semibold text-secondary" htmlFor="editIsActive">
+                        Account Active
+                      </label>
+                      {isSelfEdit && (
+                        <div className="form-text text-muted small mt-1">
+                          🔒 Self-deactivation is prohibited. You cannot deactivate your logged-in account.
+                        </div>
+                      )}
+                      {!isSelfEdit && isLastActiveAdmin && (
+                        <div className="form-text text-muted small mt-1">
+                          🔒 Cannot deactivate the last active Administrator.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="d-flex gap-2 justify-content-end">
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary px-4"
+                        onClick={handleCloseEditModal}
+                        data-testid="cancel-edit-user-btn"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn text-white px-4 fw-semibold"
+                        style={{ backgroundColor: "#006B3C", borderColor: "#006B3C" }}
+                        disabled={isSubmittingEdit}
+                        data-testid="submit-edit-user-btn"
+                      >
+                        {isSubmittingEdit ? "Saving..." : "Save Changes"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* RESET INITIAL PASSWORD MODAL */}
       {resetPasswordUser && (

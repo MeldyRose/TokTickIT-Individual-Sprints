@@ -455,7 +455,7 @@ app.patch("/api/tickets/:id/status", async (req: Request, res: Response) => {
 
       // AC-09: Problem Appears Resolved action updates status to WAITING_FOR_REQUESTER
       if (status === "WAITING_FOR_REQUESTER") {
-        const activeStates = [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER];
+        const activeStates: TicketStatus[] = [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER];
         if (!activeStates.includes(ticket.currentStatus)) {
           return res.status(400).json({ error: "Cannot request resolution on closed, resolved, or cancelled tickets" });
         }

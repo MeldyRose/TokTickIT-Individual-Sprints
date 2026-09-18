@@ -8,12 +8,12 @@ import { Role } from "@prisma/client";
 describe("Administrator User Management API (Issue 20)", () => {
   const adminEmail = "admin@toktickit.com";
   const staffEmail = "alex.thompson@toktickit.com";
-  const requesterEmail = "jennifer.a@example.com";
+  const requesterEmail = "sarah.j@example.com";
   const defaultPassword = "Password123!";
 
-  let adminCookie: string[];
-  let staffCookie: string[];
-  let requesterCookie: string[];
+  let adminCookie: any;
+  let staffCookie: any;
+  let requesterCookie: any;
 
   beforeEach(async () => {
     // Reset test users to original seeded state
@@ -88,12 +88,12 @@ describe("Administrator User Management API (Issue 20)", () => {
 
     it("filters user list by search query (name or email)", async () => {
       const res = await request(app)
-        .get("/api/admin/users?search=Jennifer")
+        .get("/api/admin/users?search=Sarah")
         .set("Cookie", adminCookie);
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.every((u: any) => u.name.includes("Jennifer") || u.email.includes("Jennifer"))).toBe(true);
+      expect(res.body.every((u: any) => u.name.includes("Sarah") || u.email.includes("Sarah"))).toBe(true);
     });
 
     it("filters user list by role", async () => {
@@ -184,29 +184,59 @@ describe("Administrator User Management API (Issue 20)", () => {
     });
 
     it("prevents deactivating or demoting the last active Administrator with 400 Bad Request (BR-18)", async () => {
-      const activeAdmins = await getPrisma().user.findMany({
-        where: { role: Role.ADMINISTRATOR, isActive: true },
+      const currentAdmin = await getPrisma().user.findUnique({ where: { email: adminEmail } });
+      expect(currentAdmin).toBeDefined();
+
+      // Find all active admins in DB except admin@toktickit.com
+      const otherActiveAdmins = await getPrisma().user.findMany({
+        where: {
+          role: Role.ADMINISTRATOR,
+          isActive: true,
+          NOT: { id: currentAdmin!.id },
+        },
       });
 
-      // Ensure there is only 1 active admin for this test
-      if (activeAdmins.length > 1) {
-        const extraAdmins = activeAdmins.slice(1);
-        await getPrisma().user.updateMany({
-          where: { id: { in: extraAdmins.map((a) => a.id) } },
-          data: { isActive: false },
-        });
+      const otherAdminIds = otherActiveAdmins.map((a) => a.id);
+
+      try {
+        // Temporarily deactivate other active admins to make admin@toktickit.com the last active admin
+        if (otherAdminIds.length > 0) {
+          await getPrisma().user.updateMany({
+            where: { id: { in: otherAdminIds } },
+            data: { isActive: false },
+          });
+        }
+
+        // Try changing role of last active admin (admin@toktickit.com) to REQUESTER
+        const res = await request(app)
+          .patch(`/api/admin/users/${currentAdmin!.id}`)
+          .set("Cookie", adminCookie)
+          .send({ role: "REQUESTER" });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/last active administrator/i);
+      } finally {
+        // Always restore other active admins afterwards so test does not leak state
+        if (otherAdminIds.length > 0) {
+          await getPrisma().user.updateMany({
+            where: { id: { in: otherAdminIds } },
+            data: { isActive: true },
+          });
+        }
       }
+    });
 
-      const singleAdmin = activeAdmins[0];
+    it("rejects invalid role string on PATCH with 400 Bad Request", async () => {
+      const targetUser = await getPrisma().user.findUnique({ where: { email: "david.l@example.com" } });
+      expect(targetUser).toBeDefined();
 
-      // Try changing role of last active admin to REQUESTER
       const res = await request(app)
-        .patch(`/api/admin/users/${singleAdmin.id}`)
+        .patch(`/api/admin/users/${targetUser!.id}`)
         .set("Cookie", adminCookie)
-        .send({ role: "REQUESTER" });
+        .send({ role: "SUPERUSER" });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/last active administrator/i);
+      expect(res.body.error).toMatch(/valid role is required/i);
     });
 
     it("edits user details successfully (200 OK)", async () => {
