@@ -44,6 +44,15 @@ class SessionStore {
     }
   }
 
+  public destroyUserSessions(userId: string): void {
+    if (!userId) return;
+    for (const [token, session] of this.sessions.entries()) {
+      if (session.userId === userId) {
+        this.sessions.delete(token);
+      }
+    }
+  }
+
   public extractToken(req: Request): string | null {
     // 1. Check Authorization header (Bearer <token>)
     const authHeader = req.headers.authorization;

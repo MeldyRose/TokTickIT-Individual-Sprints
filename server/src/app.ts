@@ -7,6 +7,7 @@ import { getPrisma } from "./prisma.js";
 import { generateTicketNumber } from "./utils/ticketNumber.js";
 import { RequestedPriority, ITPriority, TicketStatus, Role } from "@prisma/client";
 import { authRouter } from "./routes/auth.js";
+import { adminUsersRouter } from "./routes/adminUsers.js";
 import { sessionStore } from "./services/sessionStore.js";
 import { isValidStatusTransition } from "./utils/statusMatrix.js";
 
@@ -28,6 +29,7 @@ app.use(
 app.use(express.json());
 
 app.use("/api/auth", authRouter);
+app.use("/api/admin/users", adminUsersRouter);
 
 // Helper to resolve authenticated user strictly from active session
 async function resolveAuthUser(req: Request) {
@@ -453,7 +455,7 @@ app.patch("/api/tickets/:id/status", async (req: Request, res: Response) => {
 
       // AC-09: Problem Appears Resolved action updates status to WAITING_FOR_REQUESTER
       if (status === "WAITING_FOR_REQUESTER") {
-        const activeStates = [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER];
+        const activeStates: TicketStatus[] = [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER];
         if (!activeStates.includes(ticket.currentStatus)) {
           return res.status(400).json({ error: "Cannot request resolution on closed, resolved, or cancelled tickets" });
         }

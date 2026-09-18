@@ -8,6 +8,7 @@ import { CreateTicket } from "./components/CreateTicket";
 import { MyTickets } from "./components/MyTickets";
 import { RequesterTicketDetail } from "./pages/RequesterTicketDetail";
 import { StaffTicketQueue } from "./pages/StaffTicketQueue";
+import { UserManagement } from "./pages/UserManagement";
 
 type UiState = "idle" | "loading" | "success" | "error";
 
@@ -99,12 +100,7 @@ function MainContent() {
         ) : activeTab === "create-ticket" ? (
           <CreateTicket onSuccess={handleBackToMyTickets} onCancel={handleBackToMyTickets} />
         ) : activeTab === "user-management" ? (
-          <div className="container py-4">
-            <div className="card border-0 shadow-sm p-4">
-              <h1 className="h4 fw-bold mb-3">User Management</h1>
-              <p className="text-muted">Administrator panel for managing users and roles.</p>
-            </div>
-          </div>
+          <UserManagement />
         ) : activeTab === "ticket-queue" ? (
           <StaffTicketQueue onSelectTicket={handleSelectTicket} />
         ) : (
