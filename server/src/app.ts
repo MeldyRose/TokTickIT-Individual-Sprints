@@ -8,6 +8,7 @@ import { generateTicketNumber } from "./utils/ticketNumber.js";
 import { RequestedPriority, ITPriority, TicketStatus, Role } from "@prisma/client";
 import { authRouter } from "./routes/auth.js";
 import { sessionStore } from "./services/sessionStore.js";
+import { isValidStatusTransition } from "./utils/statusMatrix.js";
 
 // Ensure uploads folder exists
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -40,24 +41,6 @@ async function resolveAuthUser(req: Request) {
   if (!user || !user.isActive) return null;
 
   return user;
-}
-
-// Permitted Ticket Status Transitions Matrix (BR-14)
-const PERMITTED_STATUS_TRANSITIONS: Record<TicketStatus, TicketStatus[]> = {
-  [TicketStatus.NEW]: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.CANCELLED],
-  [TicketStatus.OPEN]: [TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
-  [TicketStatus.IN_PROGRESS]: [TicketStatus.WAITING_FOR_REQUESTER, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
-  [TicketStatus.WAITING_FOR_REQUESTER]: [TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED, TicketStatus.CANCELLED],
-  [TicketStatus.RESOLVED]: [TicketStatus.CLOSED, TicketStatus.REOPENED],
-  [TicketStatus.REOPENED]: [TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED],
-  [TicketStatus.CLOSED]: [],
-  [TicketStatus.CANCELLED]: [],
-};
-
-function isValidStatusTransition(currentStatus: TicketStatus, targetStatus: TicketStatus): boolean {
-  if (currentStatus === targetStatus) return true;
-  const allowed = PERMITTED_STATUS_TRANSITIONS[currentStatus];
-  return allowed ? allowed.includes(targetStatus) : false;
 }
 
 app.get("/api/health", (_req: Request, res: Response) => {
@@ -187,13 +170,22 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     }
 
     const page = Math.max(1, parseInt((req.query.page as string) || "1", 10));
-    const limit = Math.min(50, Math.max(1, parseInt((req.query.limit as string) || "10", 10)));
+    const pageSizeParam = (req.query.pageSize || req.query.limit) as string;
+    const limit = Math.min(50, Math.max(1, parseInt(pageSizeParam || "10", 10)));
     const search = ((req.query.search as string) || "").trim();
-    const categoryId = req.query.categoryId as string;
+    const categoryId = (req.query.categoryId || req.query.category) as string;
     const status = req.query.status as string;
-    const relatedSystemId = req.query.relatedSystemId as string;
-    const sortBy = (req.query.sortBy as string) === "requestedPriority" ? "requestedPriority" : "createdAt";
-    const order = (req.query.order as string) === "asc" ? "asc" : "desc";
+    const relatedSystemId = (req.query.relatedSystemId || req.query.system) as string;
+    const priority = (req.query.priority || req.query.itPriority) as string;
+    const owner = (req.query.owner || req.query.ownerId) as string;
+
+    const rawSortBy = (req.query.sortBy as string) || "createdAt";
+    let sortBy = "createdAt";
+    if (rawSortBy === "requestedPriority" || rawSortBy === "itPriority" || rawSortBy === "currentStatus") {
+      sortBy = rawSortBy;
+    }
+    const orderParam = (req.query.sortOrder || req.query.order) as string;
+    const order = orderParam === "asc" ? "asc" : "desc";
 
     const where: any = {};
     if (authUser.role === Role.REQUESTER) {
@@ -212,11 +204,25 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       where.currentStatus = status as TicketStatus;
     }
 
+    if (priority && ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(priority)) {
+      where.itPriority = priority;
+    }
+
+    if (owner) {
+      if (owner === "unassigned") {
+        where.ownerId = null;
+      } else if (owner === "me") {
+        where.ownerId = authUser.id;
+      } else {
+        where.ownerId = owner;
+      }
+    }
+
     if (search) {
       where.OR = [
-        { summary: { contains: search } },
-        { description: { contains: search } },
-        { ticketNumber: { contains: search } },
+        { summary: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { ticketNumber: { contains: search, mode: "insensitive" } },
       ];
     }
 
@@ -231,6 +237,8 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       include: {
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
+        requester: { select: { id: true, name: true, email: true } },
+        owner: { select: { id: true, name: true, email: true } },
         _count: { select: { attachments: { where: { deletedAt: null } } } },
       },
     });
@@ -242,11 +250,17 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       description: t.description,
       categoryId: t.categoryId,
       categoryName: t.category.name,
+      category: t.category,
       relatedSystemId: t.relatedSystemId,
       relatedSystemName: t.relatedSystem.name,
+      relatedSystem: t.relatedSystem,
       requestedPriority: t.requestedPriority,
       itPriority: t.itPriority,
       currentStatus: t.currentStatus,
+      requesterId: t.requesterId,
+      requester: t.requester,
+      ownerId: t.ownerId,
+      owner: t.owner,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
       attachmentCount: t._count.attachments,
@@ -257,7 +271,9 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       pagination: {
         page,
         limit,
+        pageSize: limit,
         totalItems,
+        totalCount: totalItems,
         totalPages,
       },
     });
@@ -281,6 +297,7 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
         category: { select: { id: true, name: true, description: true } },
         relatedSystem: { select: { id: true, name: true, description: true } },
         requester: { select: { id: true, name: true, email: true } },
+        owner: { select: { id: true, name: true, email: true } },
         attachments: {
           orderBy: { uploadedAt: "asc" },
           select: {
@@ -308,6 +325,100 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
     res.status(200).json(ticket);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch ticket details" });
+  }
+});
+
+// Claim or Reassign Ticket Ownership (PATCH /api/tickets/:id/owner)
+app.patch("/api/tickets/:id/owner", async (req: Request, res: Response) => {
+  try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (authUser.role === Role.REQUESTER) {
+      return res.status(403).json({ error: "Forbidden: Ticket ownership controls are restricted to IT Staff and Administrators" });
+    }
+
+    const { id } = req.params;
+    const ticket = await getPrisma().ticket.findUnique({ where: { id } });
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    const { ownerId } = req.body || {};
+    let targetOwnerId: string | null = null;
+
+    if (ownerId === undefined || ownerId === authUser.id) {
+      // Claim ticket as self
+      targetOwnerId = authUser.id;
+    } else if (ownerId === null) {
+      // Unassign ticket
+      targetOwnerId = null;
+    } else if (typeof ownerId === "string") {
+      // Validate target user exists, is active, and is IT_STAFF or ADMINISTRATOR
+      const targetUser = await getPrisma().user.findUnique({ where: { id: ownerId } });
+      if (!targetUser || !targetUser.isActive || (targetUser.role !== Role.IT_STAFF && targetUser.role !== Role.ADMINISTRATOR)) {
+        return res.status(400).json({ error: "Invalid owner: Target user must be an active IT Staff or Administrator" });
+      }
+      targetOwnerId = targetUser.id;
+    } else {
+      return res.status(400).json({ error: "Invalid ownerId format" });
+    }
+
+    const updated = await getPrisma().ticket.update({
+      where: { id },
+      data: { ownerId: targetOwnerId },
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    return res.status(200).json({
+      message: "Ticket ownership updated",
+      ticketId: updated.id,
+      owner: updated.owner,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to update ticket ownership" });
+  }
+});
+
+// Update IT Priority (PATCH /api/tickets/:id/priority)
+app.patch("/api/tickets/:id/priority", async (req: Request, res: Response) => {
+  try {
+    const authUser = await resolveAuthUser(req);
+    if (!authUser) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (authUser.role === Role.REQUESTER) {
+      return res.status(403).json({ error: "Forbidden: IT Priority controls are restricted to IT Staff and Administrators" });
+    }
+
+    const { id } = req.params;
+    const ticket = await getPrisma().ticket.findUnique({ where: { id } });
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    const { itPriority } = req.body || {};
+    if (!itPriority || !["LOW", "MEDIUM", "HIGH", "URGENT"].includes(itPriority)) {
+      return res.status(400).json({ error: "Invalid IT Priority value. Must be LOW, MEDIUM, HIGH, or URGENT." });
+    }
+
+    const updated = await getPrisma().ticket.update({
+      where: { id },
+      data: { itPriority: itPriority as ITPriority },
+    });
+
+    return res.status(200).json({
+      message: "IT Priority updated",
+      ticketId: updated.id,
+      itPriority: updated.itPriority,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to update IT Priority" });
   }
 });
 

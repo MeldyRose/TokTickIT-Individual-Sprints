@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { checkSystem, Category } from "./api";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Header } from "./components/Header";
@@ -7,6 +7,7 @@ import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { CreateTicket } from "./components/CreateTicket";
 import { MyTickets } from "./components/MyTickets";
 import { RequesterTicketDetail } from "./pages/RequesterTicketDetail";
+import { StaffTicketQueue } from "./pages/StaffTicketQueue";
 
 type UiState = "idle" | "loading" | "success" | "error";
 
@@ -15,6 +16,16 @@ function MainContent() {
   const [activeTab, setActiveTab] = useState<string>("my-tickets");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [showVoluntaryPasswordModal, setShowVoluntaryPasswordModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (user) {
+      if (user.role === "IT_STAFF" && activeTab === "my-tickets") {
+        setActiveTab("ticket-queue");
+      } else if (user.role === "ADMINISTRATOR" && activeTab === "my-tickets") {
+        setActiveTab("user-management");
+      }
+    }
+  }, [user]);
 
   // Health check baseline state (for Lab 1 compliance)
   const [state, setState] = useState<UiState>("idle");
@@ -95,12 +106,7 @@ function MainContent() {
             </div>
           </div>
         ) : activeTab === "ticket-queue" ? (
-          <div className="container py-4">
-            <div className="card border-0 shadow-sm p-4">
-              <h1 className="h4 fw-bold mb-3">IT Staff Ticket Queue</h1>
-              <p className="text-muted">Operational queue for IT Staff and Administrators.</p>
-            </div>
-          </div>
+          <StaffTicketQueue onSelectTicket={handleSelectTicket} />
         ) : (
           <>
             <MyTickets
