@@ -606,6 +606,15 @@ app.get("/api/tickets/:id/notes", async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
     const notes = await getPrisma().internalNote.findMany({
       where: { ticketId: id },
       orderBy: { createdAt: "asc" },
@@ -641,6 +650,15 @@ app.post("/api/tickets/:id/notes", async (req: Request, res: Response) => {
 
     if (content.trim().length > 2000) {
       return res.status(400).json({ error: "Note content must be 2,000 characters or less" });
+    }
+
+    const ticket = await getPrisma().ticket.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
     }
 
     const note = await getPrisma().internalNote.create({
