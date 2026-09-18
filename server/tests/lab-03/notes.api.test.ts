@@ -16,7 +16,12 @@ describe("Internal Notes RBAC Security API Tests (notes.api.test.ts - Issue 19, 
     // Upsert IT Staff user
     const staffUser = await getPrisma().user.upsert({
       where: { email: "staff.notes19@toktickit.com" },
-      update: {},
+      update: {
+        passwordHash,
+        role: "IT_STAFF",
+        isActive: true,
+        mustChangePassword: false,
+      },
       create: {
         name: "Staff Notes19",
         email: "staff.notes19@toktickit.com",
@@ -30,7 +35,12 @@ describe("Internal Notes RBAC Security API Tests (notes.api.test.ts - Issue 19, 
     // Upsert Admin user
     const adminUser = await getPrisma().user.upsert({
       where: { email: "admin.notes19@toktickit.com" },
-      update: {},
+      update: {
+        passwordHash,
+        role: "ADMINISTRATOR",
+        isActive: true,
+        mustChangePassword: false,
+      },
       create: {
         name: "Admin Notes19",
         email: "admin.notes19@toktickit.com",
@@ -44,7 +54,12 @@ describe("Internal Notes RBAC Security API Tests (notes.api.test.ts - Issue 19, 
     // Upsert Requester user
     const reqUser = await getPrisma().user.upsert({
       where: { email: "req.notes19@toktickit.com" },
-      update: {},
+      update: {
+        passwordHash,
+        role: "REQUESTER",
+        isActive: true,
+        mustChangePassword: false,
+      },
       create: {
         name: "Req Notes19",
         email: "req.notes19@toktickit.com",
@@ -55,35 +70,35 @@ describe("Internal Notes RBAC Security API Tests (notes.api.test.ts - Issue 19, 
       },
     });
 
+    // Helper to get token
+    const getToken = (res: any) => {
+      const cookies = res.headers["set-cookie"];
+      if (Array.isArray(cookies)) {
+        for (const cookie of cookies) {
+          const match = cookie.match(/toktickit_session=([^;]+)/);
+          if (match) return match[1];
+        }
+      }
+      return "";
+    };
+
     // Login Staff
     const loginStaff = await request(app)
       .post("/api/auth/login")
       .send({ email: "staff.notes19@toktickit.com", password: "Password123!" });
-    const cookiesStaff = loginStaff.headers["set-cookie"];
-    if (cookiesStaff) {
-      const match = cookiesStaff[0].match(/toktickit_session=([^;]+)/);
-      if (match) staffToken = match[1];
-    }
+    staffToken = getToken(loginStaff);
 
     // Login Admin
     const loginAdmin = await request(app)
       .post("/api/auth/login")
       .send({ email: "admin.notes19@toktickit.com", password: "Password123!" });
-    const cookiesAdmin = loginAdmin.headers["set-cookie"];
-    if (cookiesAdmin) {
-      const match = cookiesAdmin[0].match(/toktickit_session=([^;]+)/);
-      if (match) adminToken = match[1];
-    }
+    adminToken = getToken(loginAdmin);
 
     // Login Requester
     const loginReq = await request(app)
       .post("/api/auth/login")
       .send({ email: "req.notes19@toktickit.com", password: "Password123!" });
-    const cookiesReq = loginReq.headers["set-cookie"];
-    if (cookiesReq) {
-      const match = cookiesReq[0].match(/toktickit_session=([^;]+)/);
-      if (match) requesterToken = match[1];
-    }
+    requesterToken = getToken(loginReq);
 
     // Ensure category and related system
     let category = await getPrisma().category.findFirst({ where: { isActive: true } });
