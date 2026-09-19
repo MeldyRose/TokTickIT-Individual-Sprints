@@ -103,34 +103,34 @@ The test plan spans eight specialized testing levels:
 
 | Test ID | Status | Execution Date | Evidence / Log Snippet |
 |---|---|---|---|
-| **UNIT-01** | PASS | 2026-09-13 | `✓ tests/lab-03/passwordValidation.test.ts (4 tests) - Validates password length and character classes` |
-| **UNIT-02** | PASS | 2026-09-13 | `✓ tests/lab-03/statusMatrix.test.ts (8 tests) - Enforces permitted status transition matrix rules` |
-| **API-01** | PASS | 2026-09-13 | `✓ tests/lab-03/auth.api.test.ts - POST /api/auth/login establishes session for valid credentials` |
-| **API-02** | PASS | 2026-09-13 | `✓ tests/lab-03/auth.api.test.ts - Rejects inactive user & invalid password with safe 401 response` |
-| **API-03** | PASS | 2026-09-13 | `✓ tests/lab-03/auth.api.test.ts - Flags mustChangePassword=true on first login` |
-| **API-04** | PASS | 2026-09-13 | `✓ tests/lab-03/auth.api.test.ts - POST /api/auth/logout invalidates session token` |
-| **API-05** | PASS | 2026-09-13 | `✓ tests/lab-03/authorization.api.test.ts - Ignores client requesterId and enforces session identity` |
-| **API-06** | PASS | 2026-09-13 | `✓ tests/lab-03/notes.api.test.ts - Rejects Requester access to Internal Notes with 403 Forbidden` |
-| **API-07** | PASS | 2026-09-13 | `✓ tests/lab-03/staff-queue.api.test.ts - GET /api/tickets returns search/filtered/sorted/paginated queue` |
-| **API-08** | PASS | 2026-09-13 | `✓ tests/lab-03/staff-ticket-detail.api.test.ts - PATCH /api/tickets/:id/owner updates ownership` |
-| **API-09** | PASS | 2026-09-13 | `✓ tests/lab-03/staff-ticket-detail.api.test.ts - PATCH /api/tickets/:id/priority updates IT Priority` |
-| **API-10** | PASS | 2026-09-13 | `✓ tests/lab-03/staff-ticket-detail.api.test.ts - PATCH /api/tickets/:id/status enforces permitted workflow` |
-| **API-11** | PASS | 2026-09-13 | `✓ tests/lab-03/staff-ticket-detail.api.test.ts - Requester Problem Appears Resolved updates status` |
-| **API-12** | PASS | 2026-09-13 | `✓ tests/lab-03/comments-notes.api.test.ts - Public Comments creation and listing succeeds` |
-| **API-13** | PASS | 2026-09-13 | `✓ tests/lab-03/comments-notes.api.test.ts - Internal Notes creation and listing restricted to staff/admin` |
-| **API-14** | PASS | 2026-09-13 | `✓ tests/lab-03/users-admin.api.test.ts - GET /api/admin/users lists users with search and role filter` |
-| **API-15** | PASS | 2026-09-13 | `✓ tests/lab-03/users-admin.api.test.ts - POST /api/admin/users creates user and rejects duplicate email` |
-| **API-16** | PASS | 2026-09-13 | `✓ tests/lab-03/users-admin.api.test.ts - Edits user and enforces self-deactivation & last admin protection` |
-| **API-17** | PASS | 2026-09-13 | `✓ tests/lab-03/users-admin.api.test.ts - Resets initial password and sets mustChangePassword=true` |
-| **UI-01** | PASS | 2026-09-13 | `✓ tests/lab-03/Login.test.tsx - Handles login form validation, busy state, and error banner` |
-| **UI-02** | PASS | 2026-09-13 | `✓ tests/lab-03/ChangePassword.test.tsx - Renders mandatory password change modal with complexity checks` |
-| **UI-03** | PASS | 2026-09-13 | `✓ tests/lab-03/StaffTicketQueue.test.tsx - Queue filters, search debounce, and pagination working` |
-| **UI-04** | PASS | 2026-09-13 | `✓ tests/lab-03/StaffTicketDetail.test.tsx - Ticket detail controls and amber internal notes rendered` |
-| **UI-05** | PASS | 2026-09-13 | `✓ tests/lab-03/UserManagement.test.tsx - User management list and creation/edit modals rendered` |
-| **RESP-01** | PASS | 2026-09-13 | `✓ tests/lab-03/Responsive.test.tsx - Queue table shifts to stacked cards on mobile (<768px)` |
-| **E2E-01** | PASS | 2026-09-13 | `✓ e2e/lab-03/authentication.spec.ts - 2 passed Full authentication and password change flow` |
-| **E2E-02** | PASS | 2026-09-13 | `✓ e2e/lab-03/staff-ticket-flow.spec.ts - 3 passed Complete IT Staff queue and ticket management flow` |
-| **E2E-03** | PASS | 2026-09-13 | `✓ e2e/lab-03/user-administration.spec.ts - 2 passed Full Administrator user management flow` |
+| **UNIT-01** | PASS | 2026-09-19 | `✓ tests/lab-03/passwordValidation.test.ts (4 tests) - Validates password length and character classes` |
+| **UNIT-02** | PASS | 2026-09-19 | `✓ tests/lab-03/statusMatrix.test.ts (8 tests) - Enforces permitted status transition matrix rules` |
+| **API-01** | PASS | 2026-09-19 | `✓ tests/lab-03/auth.api.test.ts - POST /api/auth/login establishes session for valid credentials` |
+| **API-02** | PASS | 2026-09-19 | `✓ tests/lab-03/auth.api.test.ts - Rejects inactive user & invalid password with safe 401 response` |
+| **API-03** | PASS | 2026-09-19 | `✓ tests/lab-03/auth.api.test.ts - Flags mustChangePassword=true on first login` |
+| **API-04** | PASS | 2026-09-19 | `✓ tests/lab-03/auth.api.test.ts - POST /api/auth/logout invalidates session token` |
+| **API-05** | PASS | 2026-09-19 | `✓ tests/lab-03/authorization.api.test.ts - Ignores client requesterId and enforces session identity` |
+| **API-06** | PASS | 2026-09-19 | `✓ tests/lab-03/notes.api.test.ts - Rejects Requester access to Internal Notes with 403 Forbidden` |
+| **API-07** | PASS | 2026-09-19 | `✓ tests/lab-03/staff-queue.api.test.ts - GET /api/tickets returns search/filtered/sorted/paginated queue` |
+| **API-08** | PASS | 2026-09-19 | `✓ tests/lab-03/staff-ticket-detail.api.test.ts - PATCH /api/tickets/:id/owner updates ownership` |
+| **API-09** | PASS | 2026-09-19 | `✓ tests/lab-03/staff-ticket-detail.api.test.ts - PATCH /api/tickets/:id/priority updates IT Priority` |
+| **API-10** | PASS | 2026-09-19 | `✓ tests/lab-03/staff-ticket-detail.api.test.ts - PATCH /api/tickets/:id/status enforces permitted workflow` |
+| **API-11** | PASS | 2026-09-19 | `✓ tests/lab-03/staff-ticket-detail.api.test.ts - Requester Problem Appears Resolved updates status` |
+| **API-12** | PASS | 2026-09-19 | `✓ tests/lab-03/comments-notes.api.test.ts - Public Comments creation and listing succeeds` |
+| **API-13** | PASS | 2026-09-19 | `✓ tests/lab-03/comments-notes.api.test.ts - Internal Notes creation and listing restricted to staff/admin` |
+| **API-14** | PASS | 2026-09-19 | `✓ tests/lab-03/users-admin.api.test.ts - GET /api/admin/users lists users with search and role filter` |
+| **API-15** | PASS | 2026-09-19 | `✓ tests/lab-03/users-admin.api.test.ts - POST /api/admin/users creates user and rejects duplicate email` |
+| **API-16** | PASS | 2026-09-19 | `✓ tests/lab-03/users-admin.api.test.ts - Edits user and enforces self-deactivation & last admin protection` |
+| **API-17** | PASS | 2026-09-19 | `✓ tests/lab-03/users-admin.api.test.ts - Resets initial password and sets mustChangePassword=true` |
+| **UI-01** | PASS | 2026-09-19 | `✓ tests/lab-03/Login.test.tsx - Handles login form validation, busy state, and error banner` |
+| **UI-02** | PASS | 2026-09-19 | `✓ tests/lab-03/ChangePassword.test.tsx - Renders mandatory password change modal with complexity checks` |
+| **UI-03** | PASS | 2026-09-19 | `✓ tests/lab-03/StaffTicketQueue.test.tsx - Queue filters, search debounce, and pagination working` |
+| **UI-04** | PASS | 2026-09-19 | `✓ tests/lab-03/StaffTicketDetail.test.tsx - Ticket detail controls and amber internal notes rendered` |
+| **UI-05** | PASS | 2026-09-19 | `✓ tests/lab-03/UserManagement.test.tsx - User management list and creation/edit modals rendered` |
+| **RESP-01** | PASS | 2026-09-19 | `✓ tests/lab-03/Responsive.test.tsx - Queue table shifts to stacked cards on mobile (<768px)` |
+| **E2E-01** | PASS | 2026-09-19 | `✓ e2e/lab-03/authentication.spec.ts (1 test passed) - Full authentication, mandatory password change & logout flow` |
+| **E2E-02** | PASS | 2026-09-19 | `✓ e2e/lab-03/staff-ticket-flow.spec.ts (1 test passed) - Complete IT Staff queue, filtering, claiming, priority update, status transition, public comment & internal note` |
+| **E2E-03** | PASS | 2026-09-19 | `✓ e2e/lab-03/user-administration.spec.ts (1 test passed) - Full Administrator user management, search, create user, edit user, reset password & safety rules` |
 
 ---
 

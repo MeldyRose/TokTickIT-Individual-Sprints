@@ -13,6 +13,7 @@ import {
 } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { StatusBadge, PriorityBadge } from "../components/Badge";
+import { InternalNotesSection } from "../components/InternalNotesSection";
 
 interface RequesterTicketDetailProps {
   ticketId: string;
@@ -610,6 +611,12 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
           </div>
         )}
       </div>
+
+      {user?.role !== "REQUESTER" && (
+        <div className="mt-4">
+          <InternalNotesSection ticketId={ticketId} />
+        </div>
+      )}
 
       {/* Problem Appears Resolved Modal */}
       {showResolveModal && (
