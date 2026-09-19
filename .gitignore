@@ -16,3 +16,6 @@ server/prisma/*.db
 *.log
 .DS_Store
 
+# test results & playwright
+test-results/
+

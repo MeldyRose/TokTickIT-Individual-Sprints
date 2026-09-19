@@ -1,13 +1,15 @@
 # TokTickIT-Individual-Sprints
 
-TokTickIT is an IT service desk application developed for CPE 334.  
-**Lab 2** establishes the **Requester Ticketing MVP** featuring:
+TokTickIT is a role-based IT service desk management application developed for CPE 334.  
+**Lab 3** transitions TokTickIT into a multi-role operational IT support system featuring:
 
-- **Active Requester Selection:** Simulated identity context selection for Development Requesters.
-- **Ticket Creation:** Official ticket number auto-generation (`TKT-YYYY-XXXXXX`) with multi-field validation.
-- **My Tickets Scoped View:** Multi-criteria search, filtering (category, status, related system), sorting, pagination, and ownership isolation.
-- **Ticket Details & Attachments:** Read-only ticket detail view, file attachment upload (JPG, PNG, WEBP, PDF up to 5 MB, max 5 active), binary streaming download, and soft removal with mandatory reason.
-- **Zen Green UI Theme:** Accessible color palette (`#006B3C`, `#0B7A46`, `#EAF6EF`, `#F5F7F6`), responsive table-to-card layout, and ARIA attributes.
+- **Authentication & Forced Password Change:** Email and bcrypt password authentication (`POST /api/auth/login`), `HttpOnly` session cookie management (`toktickit_session`), session revocation upon logout (`POST /api/auth/logout`), current user profile context (`GET /api/auth/me`), and mandatory first-login password change workflow (`mustChangePassword = true`).
+- **Role-Based Access Control (RBAC):** Server-side authorization enforcing 3 distinct roles (`REQUESTER`, `IT_STAFF`, `ADMINISTRATOR`) and strict Requester resource ownership scoping.
+- **IT Staff Ticket Queue & Workflow Workbench:** Operational ticket queue (`/staff/tickets`) with search query matching, status filtering, IT priority filtering, category filtering, ownership toggle ("All", "Unassigned", "Assigned to Me"), sorting, and pagination.
+- **Ticket Ownership, IT Priority & Permitted Status Transitions:** Ticket claiming/reassignment by IT Staff/Admins, IT Priority modification (`LOW`, `MEDIUM`, `HIGH`, `URGENT`), and permitted status transition matrix enforcement (`NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, `CANCELLED`).
+- **Public Comments & Confidential Internal Notes:** Chronological Public Comments section (visible to Requesters & Staff with green accent styling) and private Internal Notes section (`#FFFDE7` amber background with lock badge `🔒 Internal Notes`, restricted strictly to IT Staff & Admins with `403 Forbidden` for Requesters).
+- **Minimalist Administrator User Management:** Admin interface (`/admin/users`) featuring user listing, search by name/email, role filtering, user creation modal with initial password, user editing modal, initial password reset modal, and safety rule enforcement (prohibiting self-deactivation and deactivating the last active administrator).
+- **Zen Green Design System & Accessibility:** Zen Green color tokens (`#006B3C`, `#0B7A46`, `#EAF6EF`, `#F5F7F6`), visible focus rings (`2px #006B3C`), ARIA labels, and responsive table-to-card layout shift (<768px) with zero horizontal scroll.
 
 ---
 
@@ -15,8 +17,8 @@ TokTickIT is an IT service desk application developed for CPE 334.
 
 - `client/` — Frontend built with React 18, TypeScript, Vite, Bootstrap 5, and Vitest.
 - `server/` — Backend built with Node.js, Express, TypeScript, Prisma ORM, PostgreSQL, and Vitest.
-- `e2e/lab-02/` — End-to-End user flow tests using Playwright.
-- `docs/lab-02/` — Engineering specification, test plan, UI spec, API spec, peer review record, and AI usage documentation.
+- `e2e/lab-03/` — End-to-End user flow tests using Playwright (`authentication.spec.ts`, `staff-ticket-flow.spec.ts`, `user-administration.spec.ts`).
+- `docs/lab-03/` — Sprint specification, test plan & matrix, UI spec, API spec, peer review record (`reviewer.md`), and AI reflection (`ai-use.md`).
 
 ---
 
@@ -31,7 +33,7 @@ TokTickIT is an IT service desk application developed for CPE 334.
 
 ## Setup & Installation
 
-### 1. Clone the repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/MeldyRose/TokTickIT-Individual-Sprints.git
@@ -60,28 +62,27 @@ Create a `.env` file inside the `server/` directory based on `.env.example`:
 ```bash
 cp server/.env.example server/.env
 ```
-
-Ensure `server/.env` contains your PostgreSQL connection string and port:
-
-```env
-DATABASE_URL="postgresql://toktickit:toktickit@localhost:5432/toktickit?schema=public"
-PORT=3000
-```
-
 > **Note:** Do not commit `.env` or sensitive database credentials to source control.
 
 ### 4. Database Setup & Seeding
 
-Make sure your local PostgreSQL database server is running, then execute Prisma database sync and seed from the `server` directory:
+Ensure your local PostgreSQL database server is running, then apply database schema migrations and run the seed script from the `server` directory:
 
 ```bash
 cd server
 npx prisma db push
-npm run prisma:seed
+npm run seed
 cd ..
 ```
 
-This creates the database schema (RequesterUser, Category, RelatedSystem, Ticket, Attachment) and seeds initial reference data (4 categories, 7 related systems, 4 active requesters, and 1 inactive requester).
+The idempotent seed script populates default system categories, related systems, test user accounts across all 3 roles, and initial seeded tickets:
+
+| Email | Default Password | Role | Must Change Password |
+|---|---|---|:---:|
+| `jennifer.a@example.com` | `Password123!` | `REQUESTER` | `true` |
+| `michael.b@example.com` | `Password123!` | `REQUESTER` | `false` |
+| `alex.thompson@toktickit.com` | `Password123!` | `IT_STAFF` | `false` |
+| `admin@toktickit.com` | `Password123!` | `ADMINISTRATOR` | `false` |
 
 ---
 
@@ -103,59 +104,67 @@ npm run dev
 ```
 *(Client runs at http://localhost:5173)*
 
-Open your browser at **http://localhost:5173** to select a Development Requester and test the ticketing workflow.
+Open your browser at **http://localhost:5173** to sign in to TokTickIT.
 
 ---
 
 ## Running Automated Tests
 
-The repository includes a comprehensive 6-level test plan (Unit, API, UI Component, UI Style, Responsive, and E2E).
+The repository includes a comprehensive test suite across 8 specialized testing levels (Unit, API, Security Integration, UI Component, UI Style, Responsive, Migration/Regression, and Playwright E2E).
 
 ### 1. Backend Server API & Unit Tests
 
-Validates Prisma models, Ticket Number generator, header-based ownership scoping (`X-Requester-Id`), and attachment constraints:
+Validates password complexity rules, status transition matrix, session cookies, RBAC authorization (`401`/`403`), and admin user management APIs:
 
 ```bash
-cd server
-npm test -- --run
+npm run test:server
 ```
 
 ### 2. Frontend Client UI & Style Tests
 
-Validates React components, form validation rules, active requester header display, Zen Green style tokens, and mobile responsiveness (<768px):
+Validates React component behavior, Login validation, Mandatory Password Change checklist, IT Staff Queue debounced search/filters, Admin User Management modals, Zen Green tokens, and mobile layout responsiveness (`Responsive.test.tsx`):
 
 ```bash
-cd client
-npm test -- --run
+npm run test:client
 ```
 
 ### 3. Playwright End-to-End (E2E) Tests
 
-Validates the full user journey from Development Requester selection to ticket submission, ticket number display, attachment handling, and list scoping:
+Automates full user flows including authentication & password change (`E2E-01`), staff ticket queue, priority, public comments & internal notes (`E2E-02`), and administrator user management (`E2E-03`):
 
 ```bash
-npx playwright test e2e/lab-02
+npm run test:e2e
 ```
 
 ---
 
 ## REST API Summary
 
-All ticket and attachment endpoints enforce ownership protection using the `X-Requester-Id` header.
+All protected endpoints enforce server-side session authentication (`toktickit_session` cookie) and Role-Based Access Control (RBAC).
 
-| Method | Endpoint | Description | Scoped / Protected |
-|---|---|---|:---:|
-| `GET` | `/api/health` | Service health check | No |
-| `GET` | `/api/categories` | Retrieve active request categories | No |
-| `GET` | `/api/requesters` | Retrieve active Development Requesters | No |
-| `GET` | `/api/related-systems` | Retrieve active related systems | No |
-| `POST` | `/api/tickets` | Create new support ticket (`TKT-YYYY-XXXXXX`) | `X-Requester-Id` |
-| `GET` | `/api/tickets` | Retrieve paginated ticket list (search, filter, sort) | `X-Requester-Id` |
-| `GET` | `/api/tickets/:id` | Retrieve full ticket details & active attachments | `X-Requester-Id` |
-| `POST` | `/api/tickets/:id/attachments` | Upload file attachment (JPG/PNG/WEBP/PDF, $\le$5MB, max 5) | `X-Requester-Id` |
-| `GET` | `/api/attachments/:id/metadata` | Retrieve attachment metadata | `X-Requester-Id` |
-| `GET` | `/api/attachments/:id/download` | Download active binary attachment | `X-Requester-Id` |
-| `DELETE` | `/api/attachments/:id` | Soft-remove attachment with removal reason | `X-Requester-Id` |
+| Method | Endpoint | Permitted Roles | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/login` | Public | Authenticate email/password credentials & issue session |
+| `POST` | `/api/auth/logout` | Authenticated | Invalidate active authenticated session |
+| `GET` | `/api/auth/me` | Authenticated | Retrieve profile context & role of current user |
+| `POST` | `/api/auth/change-password` | Authenticated | Change user password (mandatory or voluntary) |
+| `GET` | `/api/tickets` | Requester, IT Staff, Admin | Retrieve tickets (Requester sees owned; Staff/Admin sees Queue with search/filter/sort/page) |
+| `POST` | `/api/tickets` | Requester, IT Staff, Admin | Create a new IT ticket |
+| `GET` | `/api/tickets/:id` | Requester (owner), Staff, Admin | Retrieve detailed ticket view & attachments |
+| `PATCH` | `/api/tickets/:id/owner` | IT Staff, Admin | Claim unassigned ticket or reassign ownership |
+| `PATCH` | `/api/tickets/:id/priority` | IT Staff, Admin | Update IT Priority (`LOW`, `MEDIUM`, `HIGH`, `URGENT`) |
+| `PATCH` | `/api/tickets/:id/status` | Requester (resolve), Staff, Admin | Update ticket status per permitted workflow transitions |
+| `GET` | `/api/tickets/:id/comments` | Requester (owner), Staff, Admin | Retrieve Public Comments for ticket |
+| `POST` | `/api/tickets/:id/comments` | Requester (owner), Staff, Admin | Post a Public Comment on ticket |
+| `GET` | `/api/tickets/:id/notes` | IT Staff, Admin | Retrieve Internal Notes (`403` for Requester) |
+| `POST` | `/api/tickets/:id/notes` | IT Staff, Admin | Post an Internal Note (`403` for Requester) |
+| `POST` | `/api/tickets/:id/attachments` | Requester (owner), Staff, Admin | Upload file attachment (JPG/PNG/WEBP/PDF, $\le$5MB, max 5) |
+| `GET` | `/api/attachments/:id/download` | Requester (owner), Staff, Admin | Download attachment binary file |
+| `DELETE` | `/api/attachments/:id` | Requester (owner), Staff, Admin | Soft-remove attachment with reason |
+| `GET` | `/api/admin/users` | Admin | List user accounts with search & role filter |
+| `POST` | `/api/admin/users` | Admin | Create user account with initial password (`mustChangePassword = true`) |
+| `PATCH` | `/api/admin/users/:id` | Admin | Edit user details, role, or active status (enforces safety rules) |
+| `POST` | `/api/admin/users/:id/reset-password` | Admin | Reset initial password requiring change on next login |
 
 ---
 
@@ -165,17 +174,18 @@ All ticket and attachment endpoints enforce ownership protection using the `X-Re
 TokTickIT-Individual-Sprints/
 ├── client/                      # React frontend application
 │   ├── src/                     # React components, context, and API client
-│   └── tests/                   # Vitest UI & Responsive test suites
+│   └── tests/                   # Vitest UI & Responsive test suites (lab-03)
 ├── server/                      # Express backend application
-│   ├── prisma/                  # Prisma schema and seed script
-│   ├── src/                     # API routes, app setup, and utils
+│   ├── prisma/                  # Prisma schema, migrations, and seed script
+│   ├── src/                     # API routes, auth middleware, and services
 │   ├── uploads/                 # Uploaded file attachments storage
-│   └── tests/                   # Supertest backend API test suites
+│   └── tests/                   # Vitest backend API & RBAC test suites (lab-03)
 ├── e2e/                         # Playwright End-to-End test suites
-│   └── lab-02/                  # Lab 2 E2E user journey tests
+│   └── lab-03/                  # Lab 3 E2E user journey tests (auth, staff flow, admin)
 ├── docs/                        # Sprint documentation
 │   ├── lab-01/                  # Lab 1 requirements & records
-│   └── lab-02/                  # Lab 2 specification, tests, ui-spec, api-spec, reviewer, ai-use
+│   ├── lab-02/                  # Lab 2 specification, tests, ui-spec, api-spec, reviewer, ai-use
+│   └── lab-03/                  # Lab 3 specification, tests, ui-spec, api-spec, reviewer, ai-use
 ├── playwright.config.ts         # Playwright E2E configuration
 ├── package.json                 # Root script runner & dependencies
 └── README.md                    # Project documentation

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { fetchCategories, fetchRelatedSystems, createTicket, Category, RelatedSystem, Priority, Ticket } from "../api";
-import { useRequester } from "../context/RequesterContext";
+import { useAuth } from "../context/AuthContext";
 
 interface CreateTicketProps {
   onSuccess: () => void;
@@ -8,7 +8,7 @@ interface CreateTicketProps {
 }
 
 export const CreateTicket: React.FC<CreateTicketProps> = ({ onSuccess, onCancel }) => {
-  const { activeRequester } = useRequester();
+  const { user } = useAuth();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [relatedSystems, setRelatedSystems] = useState<RelatedSystem[]>([]);
@@ -72,8 +72,8 @@ export const CreateTicket: React.FC<CreateTicketProps> = ({ onSuccess, onCancel 
       return;
     }
 
-    if (!activeRequester) {
-      setApiError("No active requester selected");
+    if (!user) {
+      setApiError("Authentication required");
       return;
     }
 
@@ -87,7 +87,7 @@ export const CreateTicket: React.FC<CreateTicketProps> = ({ onSuccess, onCancel 
           relatedSystemId,
           requestedPriority,
         },
-        activeRequester.id
+        user.id
       );
       setCreatedTicket(ticket);
     } catch (err: any) {
@@ -135,11 +135,11 @@ export const CreateTicket: React.FC<CreateTicketProps> = ({ onSuccess, onCancel 
       <div className="card shadow-sm border-0 p-4 p-sm-5" style={{ backgroundColor: "#FFFFFF", borderRadius: 12 }}>
         <h2 className="h4 fw-bold mb-3 text-dark">Create IT Support Ticket</h2>
 
-        {activeRequester && (
+        {user && (
           <div className="p-3 mb-4 rounded bg-light border d-flex flex-wrap gap-4">
             <div>
               <span className="small text-muted d-block">Requester</span>
-              <span className="fw-semibold small">{activeRequester.name}</span>
+              <span className="fw-semibold small">{user.name}</span>
             </div>
             <div>
               <span className="small text-muted d-block">Created Date</span>
