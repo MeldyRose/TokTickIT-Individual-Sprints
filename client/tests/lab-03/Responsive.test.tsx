@@ -56,26 +56,18 @@ describe("Responsive Component Tests (RESP-01, AC-18)", () => {
     },
   };
 
-  const mockUsersResponse: api.AdminUserListResponse = {
-    data: [
-      {
-        id: "user-resp-001",
-        name: "Responsive Test User",
-        email: "resp.user@example.com",
-        role: "IT_STAFF",
-        isActive: true,
-        mustChangePassword: false,
-        createdAt: "2026-09-15T10:00:00.000Z",
-        updatedAt: "2026-09-15T10:00:00.000Z",
-      },
-    ],
-    pagination: {
-      page: 1,
-      limit: 50,
-      totalItems: 1,
-      totalPages: 1,
+  const mockUsers: api.AdminUser[] = [
+    {
+      id: "user-resp-001",
+      name: "Responsive Test User",
+      email: "resp.user@example.com",
+      role: "IT_STAFF",
+      isActive: true,
+      mustChangePassword: false,
+      createdAt: "2026-09-15T10:00:00.000Z",
+      updatedAt: "2026-09-15T10:00:00.000Z",
     },
-  };
+  ];
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -85,7 +77,7 @@ describe("Responsive Component Tests (RESP-01, AC-18)", () => {
     vi.spyOn(api, "fetchTickets").mockResolvedValue(mockTicketsResponse);
     vi.spyOn(api, "fetchCategories").mockResolvedValue([{ id: "cat-hw", name: "Hardware" }]);
 
-    render(<StaffTicketQueue currentUserRole="IT_STAFF" currentUserId="staff-1" onSelectTicket={vi.fn()} />);
+    render(<StaffTicketQueue onSelectTicket={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByTestId("queue-row-tkt-resp-001")).toBeInTheDocument();
@@ -101,9 +93,9 @@ describe("Responsive Component Tests (RESP-01, AC-18)", () => {
   });
 
   it("renders User Management with both desktop table and mobile card containers for AC-18 responsiveness", async () => {
-    vi.spyOn(api, "fetchAdminUsers").mockResolvedValue(mockUsersResponse.data);
+    vi.spyOn(api, "fetchAdminUsers").mockResolvedValue(mockUsers);
 
-    render(<UserManagement currentAdminId="admin-1" />);
+    render(<UserManagement />);
 
     await waitFor(() => {
       expect(screen.getByTestId("user-row-user-resp-001")).toBeInTheDocument();
