@@ -11,7 +11,7 @@ import { adminUsersRouter } from "./routes/adminUsers.js";
 import { actionsRouter } from "./routes/actions.js";
 import { resolveAuthUser } from "./utils/auth.js";
 import { sessionStore } from "./services/sessionStore.js";
-import { isValidStatusTransition } from "./utils/statusMatrix.js";
+import { isValidStatusTransition, getPermittedNextStatuses } from "./utils/statusMatrix.js";
 
 // Ensure uploads folder exists
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -424,7 +424,8 @@ app.patch("/api/tickets/:id/status", async (req: Request, res: Response) => {
     }
 
     const { id } = req.params;
-    const { status, comment } = req.body || {};
+    const { status, comment, resolutionSummary, expectedUpdatedAt: bodyExpectedUpdatedAt } = req.body || {};
+    const expectedUpdatedAt = bodyExpectedUpdatedAt || req.headers["x-expected-updated-at"] || req.headers["if-match"];
 
     const ticket = await getPrisma().ticket.findUnique({
       where: { id },
@@ -434,17 +435,32 @@ app.patch("/api/tickets/:id/status", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Ticket not found" });
     }
 
+    // Optimistic Concurrency Control (OCC)
+    if (expectedUpdatedAt) {
+      const expectedTime = new Date(expectedUpdatedAt as string).getTime();
+      const actualTime = new Date(ticket.updatedAt).getTime();
+      if (!isNaN(expectedTime) && Math.abs(expectedTime - actualTime) > 1000) {
+        return res.status(409).json({
+          error: {
+            code: "STALE_UPDATE",
+            message: "Ticket has been modified by another user. Please reload latest changes.",
+            currentUpdatedAt: ticket.updatedAt.toISOString(),
+          },
+        });
+      }
+    }
+
     if (authUser.role === Role.REQUESTER) {
       if (ticket.requesterId !== authUser.id) {
         return res.status(403).json({ error: "Access denied to unowned ticket" });
       }
 
-      // BR-05: Requesters cannot directly set status to RESOLVED or CLOSED
+      // Requesters cannot directly set status to RESOLVED or CLOSED
       if (status === "RESOLVED" || status === "CLOSED") {
         return res.status(403).json({ error: "Requesters cannot set ticket status to RESOLVED or CLOSED" });
       }
 
-      // AC-09: Problem Appears Resolved action updates status to WAITING_FOR_REQUESTER
+      // Problem Appears Resolved action updates status to WAITING_FOR_REQUESTER
       if (status === "WAITING_FOR_REQUESTER") {
         const activeStates: TicketStatus[] = [TicketStatus.NEW, TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING_FOR_REQUESTER];
         if (!activeStates.includes(ticket.currentStatus)) {
@@ -469,33 +485,132 @@ app.patch("/api/tickets/:id/status", async (req: Request, res: Response) => {
         return res.status(200).json({
           message: "Ticket status updated",
           ticketId: updated.id,
+          id: updated.id,
+          ticketNumber: updated.ticketNumber,
           currentStatus: updated.currentStatus,
+          resolvedAt: updated.resolvedAt,
+          closedAt: updated.closedAt,
+          resolutionSummary: updated.resolutionSummary,
+          updatedAt: updated.updatedAt,
         });
       }
 
       return res.status(400).json({ error: "Invalid status transition for Requester" });
     }
 
-    // IT Staff / Admin workflow transitions (BR-14 validation)
-    if (status && Object.values(TicketStatus).includes(status as TicketStatus)) {
-      const targetStatus = status as TicketStatus;
-      if (!isValidStatusTransition(ticket.currentStatus, targetStatus)) {
-        return res.status(400).json({ error: "Invalid status transition" });
-      }
+    // IT Staff / Admin workflow transitions
+    if (!status || !Object.values(TicketStatus).includes(status as TicketStatus)) {
+      return res.status(400).json({ error: "Invalid status transition" });
+    }
 
-      const updated = await getPrisma().ticket.update({
-        where: { id },
-        data: { currentStatus: targetStatus },
-      });
-
-      return res.status(200).json({
-        message: "Ticket status updated",
-        ticketId: updated.id,
-        currentStatus: updated.currentStatus,
+    const targetStatus = status as TicketStatus;
+    if (!isValidStatusTransition(ticket.currentStatus, targetStatus)) {
+      return res.status(400).json({
+        error: `Invalid status transition: Cannot transition from ${ticket.currentStatus} to ${targetStatus}`,
+        currentStatus: ticket.currentStatus,
+        targetStatus,
+        permittedTransitions: getPermittedNextStatuses(ticket.currentStatus),
       });
     }
 
-    return res.status(400).json({ error: "Invalid status transition" });
+    // Resolution Gate Enforcement
+    if (targetStatus === TicketStatus.RESOLVED) {
+      const actionCount = await getPrisma().actionTaken.count({
+        where: { ticketId: id },
+      });
+
+      const details: Array<{ criterion: string; message: string }> = [];
+
+      if (actionCount === 0) {
+        details.push({
+          criterion: "MISSING_ACTION_TAKEN",
+          message: "At least one Action Taken must be logged before resolving this ticket.",
+        });
+      }
+
+      if (!resolutionSummary || typeof resolutionSummary !== "string" || resolutionSummary.trim().length < 10) {
+        details.push({
+          criterion: "MISSING_RESOLUTION_SUMMARY",
+          message: "A resolution summary of at least 10 characters is required.",
+        });
+      } else if (resolutionSummary.trim().length > 2000) {
+        details.push({
+          criterion: "INVALID_RESOLUTION_SUMMARY",
+          message: "Resolution summary must not exceed 2000 characters.",
+        });
+      }
+
+      if (details.length > 0) {
+        return res.status(422).json({
+          error: {
+            code: "RESOLUTION_GATE_FAILED",
+            message: "Ticket cannot be resolved until all resolution prerequisites are satisfied.",
+            details,
+          },
+        });
+      }
+    }
+
+    if (targetStatus === TicketStatus.CLOSED) {
+      const actionCount = await getPrisma().actionTaken.count({
+        where: { ticketId: id },
+      });
+      if (actionCount === 0) {
+        return res.status(422).json({
+          error: {
+            code: "RESOLUTION_GATE_FAILED",
+            message: "Ticket cannot be closed until all resolution prerequisites are satisfied.",
+            details: [
+              {
+                criterion: "MISSING_ACTION_TAKEN",
+                message: "At least one Action Taken must be logged before closing this ticket.",
+              },
+            ],
+          },
+        });
+      }
+    }
+
+    const dataToUpdate: any = {
+      currentStatus: targetStatus,
+    };
+
+    if (targetStatus === TicketStatus.RESOLVED) {
+      dataToUpdate.resolvedAt = new Date();
+      dataToUpdate.resolutionSummary = (resolutionSummary as string).trim();
+    } else if (targetStatus === TicketStatus.CLOSED) {
+      dataToUpdate.closedAt = new Date();
+    } else if (targetStatus === TicketStatus.REOPENED) {
+      dataToUpdate.resolvedAt = null;
+      dataToUpdate.closedAt = null;
+    }
+
+    const updated = await getPrisma().ticket.update({
+      where: { id },
+      data: dataToUpdate,
+    });
+
+    if (comment && typeof comment === "string" && comment.trim()) {
+      await getPrisma().publicComment.create({
+        data: {
+          ticketId: id,
+          authorId: authUser.id,
+          content: comment.trim(),
+        },
+      });
+    }
+
+    return res.status(200).json({
+      message: "Ticket status updated",
+      ticketId: updated.id,
+      id: updated.id,
+      ticketNumber: updated.ticketNumber,
+      currentStatus: updated.currentStatus,
+      resolvedAt: updated.resolvedAt,
+      closedAt: updated.closedAt,
+      resolutionSummary: updated.resolutionSummary,
+      updatedAt: updated.updatedAt,
+    });
   } catch (error) {
     res.status(500).json({ error: "Failed to update status" });
   }
