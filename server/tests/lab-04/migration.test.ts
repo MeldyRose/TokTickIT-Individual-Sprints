@@ -32,7 +32,10 @@ describe("Lab 4: Database Migration & Rollback Verification (MIGR-01, AC-18, BR-
     });
 
     it("verifies the documented rollback script exists and contains reversible down-migration", () => {
-      const rollbackPath = path.resolve(__dirname, "../../../docs/lab-04/rollback.sql");
+      const rollbackPath = path.resolve(
+        __dirname,
+        "../../prisma/migrations/20261028000000_lab4_actions_taken_and_workflow/rollback.sql"
+      );
       expect(fs.existsSync(rollbackPath)).toBe(true);
 
       const rollbackSql = fs.readFileSync(rollbackPath, "utf-8");

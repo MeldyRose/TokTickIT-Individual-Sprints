@@ -168,10 +168,11 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
       const res = await updateRequesterTicketStatus(
         ticketId,
         "WAITING_FOR_REQUESTER",
-        resolutionNote.trim() || "Problem appears resolved by Requester."
+        resolutionNote.trim() || "Problem appears resolved by Requester.",
+        ticket?.updatedAt
       );
       if (ticket) {
-        setTicket({ ...ticket, currentStatus: res.currentStatus });
+        setTicket({ ...ticket, currentStatus: res.currentStatus, updatedAt: res.updatedAt || ticket.updatedAt });
       }
       const updatedComments = await fetchPublicComments(ticketId).catch(() => comments);
       setComments(updatedComments);

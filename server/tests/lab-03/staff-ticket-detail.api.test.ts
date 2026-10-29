@@ -289,7 +289,7 @@ describe("IT Staff Ticket Detail Operations API (Issue 18)", () => {
       const openRes = await request(app)
         .patch(`/api/tickets/${ticketId}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "OPEN" });
+        .send({ status: "OPEN", expectedUpdatedAt: ticketRes.body.updatedAt });
 
       expect(openRes.status).toBe(200);
       expect(openRes.body.currentStatus).toBe("OPEN");
@@ -298,7 +298,7 @@ describe("IT Staff Ticket Detail Operations API (Issue 18)", () => {
       const inProgressRes = await request(app)
         .patch(`/api/tickets/${ticketId}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "IN_PROGRESS" });
+        .send({ status: "IN_PROGRESS", expectedUpdatedAt: openRes.body.updatedAt });
 
       expect(inProgressRes.status).toBe(200);
       expect(inProgressRes.body.currentStatus).toBe("IN_PROGRESS");
@@ -320,10 +320,10 @@ describe("IT Staff Ticket Detail Operations API (Issue 18)", () => {
       const invalidRes = await request(app)
         .patch(`/api/tickets/${ticketId}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "CLOSED" });
+        .send({ status: "CLOSED", expectedUpdatedAt: ticketRes.body.updatedAt });
 
       expect(invalidRes.status).toBe(400);
-      expect(invalidRes.body.error).toMatch(/Invalid status transition/i);
+      expect(invalidRes.body.error?.message || invalidRes.body.error).toMatch(/Invalid status transition/i);
     });
   });
 });

@@ -311,7 +311,10 @@ export async function postPublicComment(ticketId: string, content: string): Prom
     body: JSON.stringify({ content }),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Failed to post comment");
+  if (!res.ok) {
+    const errorMsg = json?.error?.message || json?.error || "Failed to post comment";
+    throw new Error(errorMsg);
+  }
   return json;
 }
 
@@ -321,7 +324,8 @@ export async function fetchInternalNotes(ticketId: string): Promise<InternalNote
   });
   if (!res.ok) {
     const json = await res.json().catch(() => ({}));
-    throw new Error(json?.error || "Failed to fetch internal notes");
+    const errorMsg = json?.error?.message || json?.error || "Failed to fetch internal notes";
+    throw new Error(errorMsg);
   }
   return res.json();
 }
@@ -334,32 +338,40 @@ export async function postInternalNote(ticketId: string, content: string): Promi
     body: JSON.stringify({ content }),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Failed to post internal note");
+  if (!res.ok) {
+    const errorMsg = json?.error?.message || json?.error || "Failed to post internal note";
+    throw new Error(errorMsg);
+  }
   return json;
 }
 
 export async function updateRequesterTicketStatus(
   ticketId: string,
   status: string,
-  comment?: string
-): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus }> {
+  comment?: string,
+  expectedUpdatedAt?: string
+): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus; updatedAt?: string }> {
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ status, comment }),
+    body: JSON.stringify({ status, comment, expectedUpdatedAt }),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Failed to update status");
+  if (!res.ok) {
+    const errorMsg = json?.error?.message || json?.error || "Failed to update status";
+    throw new Error(errorMsg);
+  }
   return json;
 }
 
 export async function updateTicketStatus(
   ticketId: string,
   status: string,
-  comment?: string
-): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus }> {
-  return updateRequesterTicketStatus(ticketId, status, comment);
+  comment?: string,
+  expectedUpdatedAt?: string
+): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus; updatedAt?: string }> {
+  return updateRequesterTicketStatus(ticketId, status, comment, expectedUpdatedAt);
 }
 
 export async function claimOrReassignOwner(
@@ -373,7 +385,10 @@ export async function claimOrReassignOwner(
     body: JSON.stringify({ ownerId }),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Failed to update ticket ownership");
+  if (!res.ok) {
+    const errorMsg = json?.error?.message || json?.error || "Failed to update ticket ownership";
+    throw new Error(errorMsg);
+  }
   return json;
 }
 
@@ -388,7 +403,10 @@ export async function updateItPriority(
     body: JSON.stringify({ itPriority }),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Failed to update IT Priority");
+  if (!res.ok) {
+    const errorMsg = json?.error?.message || json?.error || "Failed to update IT Priority";
+    throw new Error(errorMsg);
+  }
   return json;
 }
 
