@@ -14,6 +14,8 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { StatusBadge, PriorityBadge } from "../components/Badge";
 import { InternalNotesSection } from "../components/InternalNotesSection";
+import { TicketWorkflowControls } from "../components/TicketWorkflowControls";
+import { ConcurrencyConflictBanner } from "../components/ConcurrencyConflictBanner";
 
 interface RequesterTicketDetailProps {
   ticketId: string;
@@ -48,6 +50,42 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
   const [showResolveModal, setShowResolveModal] = useState<boolean>(false);
   const [resolutionNote, setResolutionNote] = useState<string>("");
   const [resolveSubmitting, setResolveSubmitting] = useState<boolean>(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+
+  const handleRefreshTicket = async () => {
+    if (!ticketId) return;
+    setLoading(true);
+    setConflictError(null);
+    try {
+      const [ticketData, commentsData] = await Promise.all([
+        fetchTicketDetail(ticketId),
+        fetchPublicComments(ticketId).catch(() => []),
+      ]);
+      setTicket(ticketData);
+      setAttachments(ticketData.attachments || []);
+      setComments(commentsData || []);
+    } catch (err: any) {
+      setError(err?.message || "Failed to reload ticket");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWorkflowStatusUpdated = async (newStatus: any) => {
+    if (ticket) {
+      setTicket({ ...ticket, currentStatus: newStatus });
+    }
+    try {
+      const [ticketData, commentsData] = await Promise.all([
+        fetchTicketDetail(ticketId),
+        fetchPublicComments(ticketId).catch(() => comments),
+      ]);
+      setTicket(ticketData);
+      setComments(commentsData || []);
+    } catch {
+      // Keep optimistic update
+    }
+  };
 
   useEffect(() => {
     if (!user || !ticketId) return;
@@ -164,6 +202,7 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
     if (!ticketId || resolveSubmitting) return;
 
     setResolveSubmitting(true);
+    setConflictError(null);
     try {
       const res = await updateRequesterTicketStatus(
         ticketId,
@@ -179,7 +218,15 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
       setShowResolveModal(false);
       setResolutionNote("");
     } catch (err: any) {
-      alert(err?.message || "Failed to update ticket status");
+      if (err?.status === 409 || err?.code === "STALE_UPDATE" || err?.message?.toLowerCase().includes("conflict") || err?.message?.toLowerCase().includes("stale")) {
+        setConflictError(
+          err?.message ||
+            "This ticket was updated by another user while you were viewing it. To prevent overwriting their changes, your update was not saved. Please reload the latest changes."
+        );
+        setShowResolveModal(false);
+      } else {
+        alert(err?.message || "Failed to update ticket status");
+      }
     } finally {
       setResolveSubmitting(false);
     }
@@ -230,7 +277,7 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
 
         <div className="d-flex align-items-center gap-2">
           {/* Problem Appears Resolved Action Button (AC-09, BR-05) */}
-          {isActiveTicket && (
+          {(!user || user.role === "REQUESTER") && isActiveTicket && (
             <button
               className="btn text-white btn-sm fw-semibold px-3"
               style={{ backgroundColor: "#006B3C" }}
@@ -250,6 +297,24 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
           </button>
         </div>
       </div>
+
+      {/* Concurrency Conflict Banner */}
+      {conflictError && (
+        <ConcurrencyConflictBanner
+          message={conflictError}
+          onRefresh={handleRefreshTicket}
+          onDismiss={() => setConflictError(null)}
+        />
+      )}
+
+      {/* Role-Aware Ticket Workflow Status Transition Controls */}
+      {ticket && (user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR") && (
+        <TicketWorkflowControls
+          ticket={ticket}
+          onStatusUpdated={handleWorkflowStatusUpdated}
+          onRefreshTicket={handleRefreshTicket}
+        />
+      )}
 
       {/* Main Ticket Read-Only Metadata Card */}
       <div className="card shadow-sm border-0 p-4 mb-4" style={{ borderRadius: 12, backgroundColor: "#FFFFFF" }}>

@@ -349,18 +349,28 @@ export async function updateRequesterTicketStatus(
   ticketId: string,
   status: string,
   comment?: string,
-  expectedUpdatedAt?: string
+  expectedUpdatedAt?: string,
+  resolutionSummary?: string
 ): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus; updatedAt?: string }> {
+  const payload: any = { status };
+  if (comment !== undefined) payload.comment = comment;
+  if (expectedUpdatedAt !== undefined) payload.expectedUpdatedAt = expectedUpdatedAt;
+  if (resolutionSummary !== undefined) payload.resolutionSummary = resolutionSummary;
+
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ status, comment, expectedUpdatedAt }),
+    body: JSON.stringify(payload),
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const errorMsg = json?.error?.message || json?.error || "Failed to update status";
-    throw new Error(errorMsg);
+    const error: any = new Error(errorMsg);
+    error.status = res.status;
+    error.code = json?.error?.code;
+    error.details = json?.error?.details;
+    throw error;
   }
   return json;
 }
@@ -369,9 +379,10 @@ export async function updateTicketStatus(
   ticketId: string,
   status: string,
   comment?: string,
-  expectedUpdatedAt?: string
+  expectedUpdatedAt?: string,
+  resolutionSummary?: string
 ): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus; updatedAt?: string }> {
-  return updateRequesterTicketStatus(ticketId, status, comment, expectedUpdatedAt);
+  return updateRequesterTicketStatus(ticketId, status, comment, expectedUpdatedAt, resolutionSummary);
 }
 
 export async function claimOrReassignOwner(
