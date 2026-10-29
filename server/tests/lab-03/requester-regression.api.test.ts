@@ -218,13 +218,13 @@ describe("Requester Operations & Security Probing API (Issue 16)", () => {
       const resolvedActionRes = await request(app)
         .patch(`/api/tickets/${ticketId}/status`)
         .set("Cookie", [`toktickit_session=${requesterToken}`])
-        .send({ status: "WAITING_FOR_REQUESTER", comment: "Looks fixed on my end." });
+        .send({ status: "WAITING_FOR_REQUESTER", comment: "Looks fixed on my end.", expectedUpdatedAt: ticketRes.body.updatedAt });
 
       expect(resolvedActionRes.status).toBe(200);
       expect(resolvedActionRes.body.currentStatus).toBe("WAITING_FOR_REQUESTER");
 
       // IT Staff closes ticket
-      await getPrisma().ticket.update({
+      const closedTicket = await getPrisma().ticket.update({
         where: { id: ticketId },
         data: { currentStatus: "CLOSED" },
       });
@@ -233,10 +233,10 @@ describe("Requester Operations & Security Probing API (Issue 16)", () => {
       const closedActionRes = await request(app)
         .patch(`/api/tickets/${ticketId}/status`)
         .set("Cookie", [`toktickit_session=${requesterToken}`])
-        .send({ status: "WAITING_FOR_REQUESTER" });
+        .send({ status: "WAITING_FOR_REQUESTER", expectedUpdatedAt: closedTicket.updatedAt.toISOString() });
 
       expect(closedActionRes.status).toBe(400);
-      expect(closedActionRes.body.error).toMatch(/closed, resolved, or cancelled/i);
+      expect(closedActionRes.body.error?.message || closedActionRes.body.error).toMatch(/closed, resolved, or cancelled/i);
     });
   });
 
@@ -257,12 +257,12 @@ describe("Requester Operations & Security Probing API (Issue 16)", () => {
       const openRes = await request(app)
         .patch(`/api/tickets/${ticketId}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "OPEN" });
+        .send({ status: "OPEN", expectedUpdatedAt: ticketRes.body.updatedAt });
 
       expect(openRes.status).toBe(200);
 
       // Close ticket (OPEN -> CANCELLED / CLOSED)
-      await getPrisma().ticket.update({
+      const closedTicket = await getPrisma().ticket.update({
         where: { id: ticketId },
         data: { currentStatus: "CLOSED" },
       });
@@ -271,10 +271,10 @@ describe("Requester Operations & Security Probing API (Issue 16)", () => {
       const invalidRes = await request(app)
         .patch(`/api/tickets/${ticketId}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "NEW" });
+        .send({ status: "NEW", expectedUpdatedAt: closedTicket.updatedAt.toISOString() });
 
       expect(invalidRes.status).toBe(400);
-      expect(invalidRes.body.error).toMatch(/Invalid status transition/i);
+      expect(invalidRes.body.error?.message || invalidRes.body.error).toMatch(/Invalid status transition/i);
     });
   });
 });

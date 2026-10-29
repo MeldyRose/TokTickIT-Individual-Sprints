@@ -79,18 +79,9 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       },
     });
 
-    // 2. Ensure test Category & Related System
-    testCategory = await prisma.category.upsert({
-      where: { name: "Workflow Testing Category" },
-      update: { isActive: true },
-      create: { name: "Workflow Testing Category", description: "Used for workflow tests" },
-    });
-
-    testSystem = await prisma.relatedSystem.upsert({
-      where: { name: "Workflow Testing System" },
-      update: { isActive: true },
-      create: { name: "Workflow Testing System", description: "Used for workflow tests" },
-    });
+    // 2. Reuse existing seeded Category & Related System (avoids test leaks in categories.test.ts)
+    testCategory = await prisma.category.findFirst({ where: { isActive: true } });
+    testSystem = await prisma.relatedSystem.findFirst({ where: { isActive: true } });
 
     // 3. Authenticate users
     const staffLogin = await request(app)
@@ -155,7 +146,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
 
   // Helper to create ticket
   async function createTestTicket(initialStatus: TicketStatus = TicketStatus.NEW, requesterId = requesterUser.id) {
-    const rand = Math.floor(Math.random() * 1000000);
+    const rand = Math.floor(Math.random() * 10000000);
     return prisma.ticket.create({
       data: {
         ticketNumber: `TCK-WF-${rand}`,
@@ -177,7 +168,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const openRes = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "OPEN" });
+        .send({ status: "OPEN", expectedUpdatedAt: ticket.updatedAt.toISOString() });
 
       expect(openRes.status).toBe(200);
       expect(openRes.body.currentStatus).toBe("OPEN");
@@ -186,10 +177,35 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const inProgressRes = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "IN_PROGRESS" });
+        .send({ status: "IN_PROGRESS", expectedUpdatedAt: openRes.body.updatedAt });
 
       expect(inProgressRes.status).toBe(200);
       expect(inProgressRes.body.currentStatus).toBe("IN_PROGRESS");
+    });
+
+    it("rejects same-status unchanged transition with 400 Bad Request (Item 1)", async () => {
+      const openTicket = await createTestTicket(TicketStatus.OPEN);
+
+      const sameStatusRes = await request(app)
+        .patch(`/api/tickets/${openTicket.id}/status`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({ status: "OPEN", expectedUpdatedAt: openTicket.updatedAt.toISOString() });
+
+      expect(sameStatusRes.status).toBe(400);
+      expect(sameStatusRes.body.error.code).toBe("INVALID_INPUT");
+      expect(sameStatusRes.body.error.message).toMatch(/Status is already OPEN/i);
+
+      // Terminal state CLOSED -> CLOSED should also be rejected
+      const closedTicket = await createTestTicket(TicketStatus.CLOSED);
+
+      const sameClosedRes = await request(app)
+        .patch(`/api/tickets/${closedTicket.id}/status`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({ status: "CLOSED", expectedUpdatedAt: closedTicket.updatedAt.toISOString() });
+
+      expect(sameClosedRes.status).toBe(400);
+      expect(sameClosedRes.body.error.code).toBe("INVALID_INPUT");
+      expect(sameClosedRes.body.error.message).toMatch(/Status is already CLOSED/i);
     });
 
     it("rejects disallowed transition from NEW to CLOSED with 400 Bad Request", async () => {
@@ -198,10 +214,11 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const res = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "CLOSED" });
+        .send({ status: "CLOSED", expectedUpdatedAt: ticket.updatedAt.toISOString() });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/Invalid status transition/i);
+      expect(res.body.error.code).toBe("INVALID_INPUT");
+      expect(res.body.error.message).toMatch(/Invalid status transition/i);
     });
 
     it("rejects disallowed transition from NEW to RESOLVED with 400 Bad Request", async () => {
@@ -210,10 +227,15 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const res = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "RESOLVED", resolutionSummary: "This should fail at the matrix check" });
+        .send({
+          status: "RESOLVED",
+          resolutionSummary: "This should fail at the matrix check",
+          expectedUpdatedAt: ticket.updatedAt.toISOString(),
+        });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/Invalid status transition/i);
+      expect(res.body.error.code).toBe("INVALID_INPUT");
+      expect(res.body.error.message).toMatch(/Invalid status transition/i);
     });
 
     it("rejects transitions from terminal states CLOSED and CANCELLED with 400 Bad Request", async () => {
@@ -222,20 +244,22 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const fromClosed = await request(app)
         .patch(`/api/tickets/${closedTicket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "OPEN" });
+        .send({ status: "OPEN", expectedUpdatedAt: closedTicket.updatedAt.toISOString() });
 
       expect(fromClosed.status).toBe(400);
-      expect(fromClosed.body.error).toMatch(/Invalid status transition/i);
+      expect(fromClosed.body.error.code).toBe("INVALID_INPUT");
+      expect(fromClosed.body.error.message).toMatch(/Invalid status transition/i);
 
       const cancelledTicket = await createTestTicket(TicketStatus.CANCELLED);
 
       const fromCancelled = await request(app)
         .patch(`/api/tickets/${cancelledTicket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "IN_PROGRESS" });
+        .send({ status: "IN_PROGRESS", expectedUpdatedAt: cancelledTicket.updatedAt.toISOString() });
 
       expect(fromCancelled.status).toBe(400);
-      expect(fromCancelled.body.error).toMatch(/Invalid status transition/i);
+      expect(fromCancelled.body.error.code).toBe("INVALID_INPUT");
+      expect(fromCancelled.body.error.message).toMatch(/Invalid status transition/i);
     });
 
     it("rejects unrecognized status values with 400 Bad Request", async () => {
@@ -244,10 +268,11 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const res = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "INVALID_STATUS_VALUE" });
+        .send({ status: "INVALID_STATUS_VALUE", expectedUpdatedAt: ticket.updatedAt.toISOString() });
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/Invalid status transition/i);
+      expect(res.body.error.code).toBe("INVALID_INPUT");
+      expect(res.body.error.message).toMatch(/Invalid status transition/i);
     });
   });
 
@@ -257,9 +282,10 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
 
       const res = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
-        .send({ status: "OPEN" });
+        .send({ status: "OPEN", expectedUpdatedAt: ticket.updatedAt.toISOString() });
 
       expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("UNAUTHORIZED");
     });
 
     it("rejects REQUESTER attempting direct transition to RESOLVED with 403 Forbidden", async () => {
@@ -268,10 +294,15 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const res = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${requesterToken}`])
-        .send({ status: "RESOLVED", resolutionSummary: "Requester trying to resolve directly" });
+        .send({
+          status: "RESOLVED",
+          resolutionSummary: "Requester trying to resolve directly",
+          expectedUpdatedAt: ticket.updatedAt.toISOString(),
+        });
 
       expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/Requesters cannot set ticket status to RESOLVED or CLOSED/i);
+      expect(res.body.error.code).toBe("FORBIDDEN");
+      expect(res.body.error.message).toMatch(/Requesters cannot set ticket status to RESOLVED or CLOSED/i);
     });
 
     it("rejects REQUESTER attempting direct transition to CLOSED with 403 Forbidden", async () => {
@@ -280,10 +311,11 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const res = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${requesterToken}`])
-        .send({ status: "CLOSED" });
+        .send({ status: "CLOSED", expectedUpdatedAt: ticket.updatedAt.toISOString() });
 
       expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/Requesters cannot set ticket status to RESOLVED or CLOSED/i);
+      expect(res.body.error.code).toBe("FORBIDDEN");
+      expect(res.body.error.message).toMatch(/Requesters cannot set ticket status to RESOLVED or CLOSED/i);
     });
 
     it("allows REQUESTER to trigger advisory 'Problem Appears Resolved' transitioning to WAITING_FOR_REQUESTER", async () => {
@@ -295,6 +327,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
         .send({
           status: "WAITING_FOR_REQUESTER",
           comment: "I checked the printer and the issue seems resolved.",
+          expectedUpdatedAt: ticket.updatedAt.toISOString(),
         });
 
       expect(res.status).toBe(200);
@@ -308,16 +341,20 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       expect(comments[0].content).toContain("printer and the issue seems resolved");
     });
 
-    it("rejects REQUESTER attempting status change on an unowned ticket with 403 Forbidden", async () => {
+    it("evaluates role/ownership BEFORE OCC: requester on unowned ticket receives 403 even with stale timestamp (Item 3)", async () => {
       const ticket = await createTestTicket(TicketStatus.OPEN, requesterUser.id);
+
+      // Stale timestamp intentionally provided
+      const staleTimestamp = new Date(Date.now() - 60000).toISOString();
 
       const res = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${otherRequesterToken}`])
-        .send({ status: "WAITING_FOR_REQUESTER" });
+        .send({ status: "WAITING_FOR_REQUESTER", expectedUpdatedAt: staleTimestamp });
 
       expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/Access denied to unowned ticket/i);
+      expect(res.body.error.code).toBe("FORBIDDEN");
+      expect(res.body.error.message).toMatch(/Access denied to unowned ticket/i);
     });
   });
 
@@ -328,7 +365,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const res = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "RESOLVED" });
+        .send({ status: "RESOLVED", expectedUpdatedAt: ticket.updatedAt.toISOString() });
 
       expect(res.status).toBe(422);
       expect(res.body.error.code).toBe("RESOLUTION_GATE_FAILED");
@@ -361,6 +398,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
         .send({
           status: "RESOLVED",
           resolutionSummary: "Short", // < 10 chars
+          expectedUpdatedAt: ticket.updatedAt.toISOString(),
         });
 
       expect(res.status).toBe(422);
@@ -379,6 +417,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
         .send({
           status: "RESOLVED",
           resolutionSummary: "Replaced faulty Ethernet cable and restored uplink successfully.",
+          expectedUpdatedAt: ticket.updatedAt.toISOString(),
         });
 
       expect(res.status).toBe(422);
@@ -409,6 +448,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
         .send({
           status: "RESOLVED",
           resolutionSummary: "Cleaned optical fiber connector and re-seated transceiver; connection restored.",
+          expectedUpdatedAt: ticket.updatedAt.toISOString(),
         });
 
       expect(res.status).toBe(200);
@@ -426,7 +466,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const failCloseRes = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "CLOSED" });
+        .send({ status: "CLOSED", expectedUpdatedAt: ticket.updatedAt.toISOString() });
 
       expect(failCloseRes.status).toBe(422);
       expect(failCloseRes.body.error.code).toBe("RESOLUTION_GATE_FAILED");
@@ -448,7 +488,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const successCloseRes = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "CLOSED" });
+        .send({ status: "CLOSED", expectedUpdatedAt: ticket.updatedAt.toISOString() });
 
       expect(successCloseRes.status).toBe(200);
       expect(successCloseRes.body.currentStatus).toBe("CLOSED");
@@ -457,7 +497,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
 
     it("resets resolvedAt and closedAt to null when reopening ticket (BR-14)", async () => {
       const ticket = await createTestTicket(TicketStatus.RESOLVED);
-      await prisma.ticket.update({
+      const updatedTicket = await prisma.ticket.update({
         where: { id: ticket.id },
         data: {
           resolvedAt: new Date(),
@@ -468,7 +508,7 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
       const reopenRes = await request(app)
         .patch(`/api/tickets/${ticket.id}/status`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
-        .send({ status: "REOPENED" });
+        .send({ status: "REOPENED", expectedUpdatedAt: updatedTicket.updatedAt.toISOString() });
 
       expect(reopenRes.status).toBe(200);
       expect(reopenRes.body.currentStatus).toBe("REOPENED");
@@ -477,18 +517,44 @@ describe("Lab 4: Ticket Workflow, Resolution Gate & Stale-Update Conflict Enforc
     });
   });
 
-  describe("4. Optimistic Concurrency Control (OCC) / Stale-Update Collision Handling", () => {
-    it("rejects stale update attempt with 409 Conflict (code STALE_UPDATE)", async () => {
+  describe("4. Optimistic Concurrency Control (OCC) / Stale-Update Collision Handling (Item 2)", () => {
+    it("rejects request missing expectedUpdatedAt with 400 Bad Request", async () => {
       const ticket = await createTestTicket(TicketStatus.OPEN);
 
-      // Simulate a concurrent update by another user that advances updatedAt
-      await new Promise((r) => setTimeout(r, 1100));
+      const res = await request(app)
+        .patch(`/api/tickets/${ticket.id}/status`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({ status: "IN_PROGRESS" }); // No expectedUpdatedAt
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("INVALID_INPUT");
+      expect(res.body.error.message).toMatch(/expectedUpdatedAt is required/i);
+    });
+
+    it("rejects invalid/garbage expectedUpdatedAt with 400 Bad Request", async () => {
+      const ticket = await createTestTicket(TicketStatus.OPEN);
+
+      const res = await request(app)
+        .patch(`/api/tickets/${ticket.id}/status`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({ status: "IN_PROGRESS", expectedUpdatedAt: "garbage" });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("INVALID_INPUT");
+      expect(res.body.error.message).toMatch(/expectedUpdatedAt is required and must be a valid ISO date/i);
+    });
+
+    it("rejects stale update attempt with 409 Conflict (code STALE_UPDATE) via atomic updateMany", async () => {
+      const ticket = await createTestTicket(TicketStatus.OPEN);
+
+      // Concurrent modification by another user
+      await new Promise((r) => setTimeout(r, 50));
       await prisma.ticket.update({
         where: { id: ticket.id },
-        data: { description: "Concurrent update description change." },
+        data: { description: "Concurrent update by another engineer" },
       });
 
-      // User submits update with stale timestamp
+      // User attempts update with stale timestamp
       const staleTimestamp = ticket.updatedAt.toISOString();
 
       const res = await request(app)
