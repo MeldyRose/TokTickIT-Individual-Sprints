@@ -8,6 +8,8 @@ import { generateTicketNumber } from "./utils/ticketNumber.js";
 import { RequestedPriority, ITPriority, TicketStatus, Role } from "@prisma/client";
 import { authRouter } from "./routes/auth.js";
 import { adminUsersRouter } from "./routes/adminUsers.js";
+import { actionsRouter } from "./routes/actions.js";
+import { resolveAuthUser } from "./utils/auth.js";
 import { sessionStore } from "./services/sessionStore.js";
 import { isValidStatusTransition } from "./utils/statusMatrix.js";
 
@@ -30,20 +32,9 @@ app.use(express.json());
 
 app.use("/api/auth", authRouter);
 app.use("/api/admin/users", adminUsersRouter);
+app.use("/api/tickets/:id/actions", actionsRouter);
 
-// Helper to resolve authenticated user strictly from active session
-async function resolveAuthUser(req: Request) {
-  const token = sessionStore.extractToken(req);
-  if (!token) return null;
 
-  const session = sessionStore.getSession(token);
-  if (!session) return null;
-
-  const user = await getPrisma().user.findUnique({ where: { id: session.userId } });
-  if (!user || !user.isActive) return null;
-
-  return user;
-}
 
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
