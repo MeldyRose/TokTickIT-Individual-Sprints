@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import bcrypt from "bcryptjs";
-import { Role } from "@prisma/client";
+import { Role, TicketStatus } from "@prisma/client";
 
 describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (actions-taken.api.test.ts)", () => {
   const prisma = getPrisma();
@@ -24,10 +24,12 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
   let inactiveStaffToken = "";
 
   let testTicket: any;
-  let unassignedTicket: any;
   let otherUserTicket: any;
+  let closedTicket: any;
 
-  beforeEach(async () => {
+  const createdTicketIds: string[] = [];
+
+  beforeAll(async () => {
     const passwordHash = bcrypt.hashSync("Password123!", 10);
 
     // 1. Create or upsert users
@@ -117,8 +119,6 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
       .send({ email: "other.requester.actions@toktickit.com", password: "Password123!" });
     otherRequesterToken = otherReqLogin.headers["set-cookie"]?.[0]?.match(/toktickit_session=([^;]+)/)?.[1] || "";
 
-    // Inactive staff login will fail with 401 as expected
-    // Generate a valid session token manually to test token validation for deactivated accounts
     const { sessionStore } = await import("../../src/services/sessionStore.js");
     inactiveStaffToken = sessionStore.createSession(inactiveStaffUser.id);
 
@@ -137,7 +137,7 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
       });
     }
 
-    // 4. Create Tickets
+    // 4. Create base test tickets (Tracked for cleanup to prevent test leaks)
     testTicket = await prisma.ticket.create({
       data: {
         ticketNumber: `TKT-ACT-${Date.now()}-1`,
@@ -149,18 +149,7 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
         ownerId: staffUser.id,
       },
     });
-
-    unassignedTicket = await prisma.ticket.create({
-      data: {
-        ticketNumber: `TKT-ACT-${Date.now()}-2`,
-        summary: "Unassigned Ticket for Claim Verification",
-        description: "Testing claimTicket during action creation",
-        categoryId: category.id,
-        relatedSystemId: relatedSystem.id,
-        requesterId: requesterUser.id,
-        ownerId: null,
-      },
-    });
+    createdTicketIds.push(testTicket.id);
 
     otherUserTicket = await prisma.ticket.create({
       data: {
@@ -173,9 +162,30 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
         ownerId: null,
       },
     });
+    createdTicketIds.push(otherUserTicket.id);
+
+    closedTicket = await prisma.ticket.create({
+      data: {
+        ticketNumber: `TKT-ACT-${Date.now()}-4`,
+        summary: "Closed Ticket for Terminal State Verification",
+        description: "Testing actions rejection on closed tickets",
+        categoryId: category.id,
+        relatedSystemId: relatedSystem.id,
+        requesterId: requesterUser.id,
+        currentStatus: TicketStatus.CLOSED,
+        closedAt: new Date(),
+      },
+    });
+    createdTicketIds.push(closedTicket.id);
   });
 
   afterAll(async () => {
+    // Clean up created tickets and their child actions to ensure zero database leaks
+    if (createdTicketIds.length > 0) {
+      await prisma.actionTaken.deleteMany({ where: { ticketId: { in: createdTicketIds } } });
+      await prisma.ticket.deleteMany({ where: { id: { in: createdTicketIds } } });
+    }
+
     await prisma.$disconnect();
   });
 
@@ -282,6 +292,65 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
       expect(res3.status).toBe(400);
     });
 
+    it("rejects non-boolean followUpRequired (e.g. string 'false' or numbers) with 400 Bad Request", async () => {
+      const res = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          description: "Testing non boolean followUpRequired validation.",
+          result: "Should reject non boolean values.",
+          followUpRequired: "false",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.details.some((d: any) => d.field === "followUpRequired")).toBe(true);
+    });
+
+    it("rejects invalid or future actionDateTime with 400 Bad Request", async () => {
+      // 1. Invalid date string
+      const res1 = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          description: "Testing invalid date format for action line.",
+          result: "Should return 400 Bad Request.",
+          actionDateTime: "not-a-valid-iso-date",
+          followUpRequired: false,
+        });
+
+      expect(res1.status).toBe(400);
+      expect(res1.body.error.details.some((d: any) => d.field === "actionDateTime")).toBe(true);
+
+      // 2. Future date (> 1 day in future)
+      const futureDate = new Date(Date.now() + 86400000 * 30).toISOString();
+      const res2 = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          description: "Testing future date rejection for action line.",
+          result: "Should reject future timestamps.",
+          actionDateTime: futureDate,
+          followUpRequired: false,
+        });
+
+      expect(res2.status).toBe(400);
+      expect(res2.body.error.details.some((d: any) => d.field === "actionDateTime")).toBe(true);
+    });
+
+    it("rejects logging actions on CLOSED or CANCELLED tickets with 400 Bad Request", async () => {
+      const res = await request(app)
+        .post(`/api/tickets/${closedTicket.id}/actions`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          description: "Attempting to log action on closed ticket.",
+          result: "Should be rejected.",
+          followUpRequired: false,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toContain("terminal status");
+    });
+
     it("succeeds when followUpRequired is true and non-empty followUpNote is provided (201 Created)", async () => {
       const res = await request(app)
         .post(`/api/tickets/${testTicket.id}/actions`)
@@ -322,7 +391,18 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
     });
 
     it("simultaneously claims unassigned ticket when claimTicket is true (AC-03, BR-09)", async () => {
-      expect(unassignedTicket.ownerId).toBeNull();
+      const unassignedTicket = await prisma.ticket.create({
+        data: {
+          ticketNumber: `TKT-ACT-CLM-${Date.now()}`,
+          summary: "Unassigned Ticket for Claim Verification",
+          description: "Testing claimTicket during action creation",
+          categoryId: testTicket.categoryId,
+          relatedSystemId: testTicket.relatedSystemId,
+          requesterId: requesterUser.id,
+          ownerId: null,
+        },
+      });
+      createdTicketIds.push(unassignedTicket.id);
 
       const res = await request(app)
         .post(`/api/tickets/${unassignedTicket.id}/actions`)
@@ -339,6 +419,52 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
 
       const updatedTicket = await prisma.ticket.findUnique({ where: { id: unassignedTicket.id } });
       expect(updatedTicket?.ownerId).toBe(staffUser.id);
+    });
+
+    it("prevents claimTicket race condition when multiple claims occur concurrently", async () => {
+      const raceTicket = await prisma.ticket.create({
+        data: {
+          ticketNumber: `TKT-ACT-RACE-${Date.now()}`,
+          summary: "Race Condition Ticket",
+          description: "Testing concurrent claimTicket protection",
+          categoryId: testTicket.categoryId,
+          relatedSystemId: testTicket.relatedSystemId,
+          requesterId: requesterUser.id,
+          ownerId: null,
+        },
+      });
+      createdTicketIds.push(raceTicket.id);
+
+      // Run two claims in parallel with different performers
+      const [res1, res2] = await Promise.all([
+        request(app)
+          .post(`/api/tickets/${raceTicket.id}/actions`)
+          .set("Cookie", [`toktickit_session=${staffToken}`])
+          .send({
+            description: "Staff attempting simultaneous claim.",
+            result: "Claim attempt 1.",
+            followUpRequired: false,
+            claimTicket: true,
+          }),
+        request(app)
+          .post(`/api/tickets/${raceTicket.id}/actions`)
+          .set("Cookie", [`toktickit_session=${adminToken}`])
+          .send({
+            description: "Admin attempting simultaneous claim.",
+            result: "Claim attempt 2.",
+            followUpRequired: false,
+            claimTicket: true,
+          }),
+      ]);
+
+      expect(res1.status).toBe(201);
+      expect(res2.status).toBe(201);
+
+      // Verify that both returned ticketOwnerId match the single winner in the DB
+      const finalTicket = await prisma.ticket.findUnique({ where: { id: raceTicket.id } });
+      expect([staffUser.id, adminUser.id]).toContain(finalTicket?.ownerId);
+      expect(res1.body.ticketOwnerId).toBe(finalTicket?.ownerId);
+      expect(res2.body.ticketOwnerId).toBe(finalTicket?.ownerId);
     });
 
     it("does not change ticket owner when claimTicket is false (AC-08, BR-08)", async () => {
@@ -417,7 +543,7 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
     let action1: any;
     let action2: any;
 
-    beforeEach(async () => {
+    beforeAll(async () => {
       action1 = await prisma.actionTaken.create({
         data: {
           ticketId: testTicket.id,
@@ -502,7 +628,7 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
   describe("3. PATCH /api/tickets/:id/actions/:actionId — Update Action Taken", () => {
     let targetAction: any;
 
-    beforeEach(async () => {
+    beforeAll(async () => {
       targetAction = await prisma.actionTaken.create({
         data: {
           ticketId: testTicket.id,
@@ -517,11 +643,77 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
       });
     });
 
-    it("allows IT_STAFF to update description, result, and follow-up (200 OK)", async () => {
+    it("enforces mandatory expectedUpdatedAt on PATCH and returns 400 when missing or invalid", async () => {
+      // 1. Missing expectedUpdatedAt
+      const res1 = await request(app)
+        .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          description: "Updating description without expectedUpdatedAt.",
+        });
+
+      expect(res1.status).toBe(400);
+      expect(res1.body.error.code).toBe("INVALID_INPUT");
+
+      // 2. Invalid date string
+      const res2 = await request(app)
+        .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          description: "Updating description with invalid expectedUpdatedAt.",
+          expectedUpdatedAt: "invalid-timestamp",
+        });
+
+      expect(res2.status).toBe(400);
+      expect(res2.body.error.code).toBe("INVALID_INPUT");
+    });
+
+    it("rejects non-boolean followUpRequired on PATCH with 400 Bad Request", async () => {
+      const current = await prisma.actionTaken.findUnique({ where: { id: targetAction.id } });
+
       const res = await request(app)
         .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
         .send({
+          expectedUpdatedAt: current!.updatedAt.toISOString(),
+          followUpRequired: "false",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.details.some((d: any) => d.field === "followUpRequired")).toBe(true);
+    });
+
+    it("rejects updating action on CLOSED or CANCELLED ticket with 400 Bad Request", async () => {
+      const closedAction = await prisma.actionTaken.create({
+        data: {
+          ticketId: closedTicket.id,
+          performerId: staffUser.id,
+          description: "Action on closed ticket.",
+          result: "Closed test.",
+          followUpRequired: false,
+        },
+      });
+
+      const res = await request(app)
+        .patch(`/api/tickets/${closedTicket.id}/actions/${closedAction.id}`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          expectedUpdatedAt: closedAction.updatedAt.toISOString(),
+          description: "Attempting to update action on closed ticket.",
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.message).toContain("terminal status");
+    });
+
+    it("allows IT_STAFF to update description, result, and follow-up (200 OK)", async () => {
+      const current = await prisma.actionTaken.findUnique({ where: { id: targetAction.id } });
+
+      const res = await request(app)
+        .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          expectedUpdatedAt: current!.updatedAt.toISOString(),
           description: "Updated detailed troubleshooting description.",
           result: "Updated resolution outcome.",
           followUpRequired: false,
@@ -539,10 +731,13 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
     });
 
     it("allows ADMINISTRATOR to update an existing Action Taken (200 OK)", async () => {
+      const current = await prisma.actionTaken.findUnique({ where: { id: targetAction.id } });
+
       const res = await request(app)
         .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
         .set("Cookie", [`toktickit_session=${adminToken}`])
         .send({
+          expectedUpdatedAt: current!.updatedAt.toISOString(),
           result: "Administrator revised result verification.",
         });
 
@@ -552,7 +747,7 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
 
     it("enforces mandatory followUpNote on PATCH if followUpRequired is updated to true", async () => {
       // First update to followUpRequired: false
-      await prisma.actionTaken.update({
+      const current = await prisma.actionTaken.update({
         where: { id: targetAction.id },
         data: { followUpRequired: false, followUpNote: null },
       });
@@ -561,6 +756,7 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
         .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
         .send({
+          expectedUpdatedAt: current.updatedAt.toISOString(),
           followUpRequired: true,
           followUpNote: "",
         });
@@ -570,10 +766,13 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
     });
 
     it("rejects REQUESTER update attempt with 403 Forbidden", async () => {
+      const current = await prisma.actionTaken.findUnique({ where: { id: targetAction.id } });
+
       const res = await request(app)
         .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
         .set("Cookie", [`toktickit_session=${requesterToken}`])
         .send({
+          expectedUpdatedAt: current!.updatedAt.toISOString(),
           description: "Requester trying to update action.",
         });
 
@@ -594,6 +793,39 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
 
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe("STALE_UPDATE");
+    });
+
+    it("rejects stale updates within the same second (reproduced race condition test)", async () => {
+      // 1. Fetch fresh record and timestamp T1
+      const initialAction = await prisma.actionTaken.findUnique({ where: { id: targetAction.id } });
+      const staleTimestamp = initialAction!.updatedAt.toISOString();
+
+      // 2. First editor updates the action successfully (advancing updatedAt to T2, within hundreds of ms)
+      const firstEditRes = await request(app)
+        .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          expectedUpdatedAt: staleTimestamp,
+          description: "First editor update that succeeds.",
+        });
+      expect(firstEditRes.status).toBe(200);
+
+      // 3. Second editor attempts update with the original stale timestamp (even within < 1 second)
+      const secondEditRes = await request(app)
+        .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
+        .set("Cookie", [`toktickit_session=${adminToken}`])
+        .send({
+          expectedUpdatedAt: staleTimestamp,
+          description: "Second editor attempting update with stale timestamp from same second.",
+        });
+
+      // Must be rejected with 409 STALE_UPDATE and NOT overwrite first edit
+      expect(secondEditRes.status).toBe(409);
+      expect(secondEditRes.body.error.code).toBe("STALE_UPDATE");
+
+      // Verify the first editor's content remains preserved in DB
+      const verifiedAction = await prisma.actionTaken.findUnique({ where: { id: targetAction.id } });
+      expect(verifiedAction!.description).toBe("First editor update that succeeds.");
     });
 
     it("succeeds when expectedUpdatedAt matches current record updatedAt", async () => {
@@ -617,6 +849,7 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
         .patch(`/api/tickets/${testTicket.id}/actions/cuid_fake_action_9999`)
         .set("Cookie", [`toktickit_session=${staffToken}`])
         .send({
+          expectedUpdatedAt: new Date().toISOString(),
           description: "Update on non existent action.",
         });
 

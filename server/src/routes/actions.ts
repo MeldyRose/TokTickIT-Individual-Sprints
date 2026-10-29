@@ -1,23 +1,9 @@
 import { Router, Request, Response } from "express";
-import { Role } from "@prisma/client";
+import { Role, TicketStatus } from "@prisma/client";
 import { getPrisma } from "../prisma.js";
-import { sessionStore } from "../services/sessionStore.js";
+import { resolveAuthUser } from "../utils/auth.js";
 
 export const actionsRouter = Router({ mergeParams: true });
-
-// Helper to resolve authenticated user strictly from active session
-export async function resolveAuthUser(req: Request) {
-  const token = sessionStore.extractToken(req);
-  if (!token) return null;
-
-  const session = sessionStore.getSession(token);
-  if (!session) return null;
-
-  const user = await getPrisma().user.findUnique({ where: { id: session.userId } });
-  if (!user || !user.isActive) return null;
-
-  return user;
-}
 
 // POST /api/tickets/:id/actions - Create Action Taken
 actionsRouter.post("/", async (req: Request, res: Response) => {
@@ -55,6 +41,16 @@ actionsRouter.post("/", async (req: Request, res: Response) => {
       });
     }
 
+    // Terminal tickets (CLOSED, CANCELLED) cannot accept actions
+    if (ticket.currentStatus === TicketStatus.CLOSED || ticket.currentStatus === TicketStatus.CANCELLED) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_INPUT",
+          message: `Cannot log actions on a ticket with terminal status ${ticket.currentStatus}.`,
+        },
+      });
+    }
+
     const {
       description,
       result,
@@ -66,6 +62,36 @@ actionsRouter.post("/", async (req: Request, res: Response) => {
     } = req.body || {};
 
     const validationDetails: Array<{ field: string; issue: string }> = [];
+
+    // Validate actionDateTime if provided: must be a valid ISO date string and not in the future
+    let parsedActionDateTime = new Date();
+    if (actionDateTime !== undefined && actionDateTime !== null) {
+      if (typeof actionDateTime !== "string" || !actionDateTime.trim() || isNaN(new Date(actionDateTime).getTime())) {
+        validationDetails.push({
+          field: "actionDateTime",
+          issue: "Action date/time must be a valid ISO date string.",
+        });
+      } else {
+        const dt = new Date(actionDateTime);
+        // Reject future dates (allowing 5 minute clock drift)
+        if (dt.getTime() > Date.now() + 5 * 60 * 1000) {
+          validationDetails.push({
+            field: "actionDateTime",
+            issue: "Action date/time cannot be in the future.",
+          });
+        } else {
+          parsedActionDateTime = dt;
+        }
+      }
+    }
+
+    // Reject non-boolean followUpRequired
+    if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
+      validationDetails.push({
+        field: "followUpRequired",
+        issue: "followUpRequired must be a boolean (true or false).",
+      });
+    }
 
     // Validate description: mandatory string, 10 - 2000 chars
     if (!description || typeof description !== "string" || description.trim().length < 10) {
@@ -127,49 +153,54 @@ actionsRouter.post("/", async (req: Request, res: Response) => {
       });
     }
 
-    // Parse actionDateTime or default to current date
-    let parsedActionDateTime = new Date();
-    if (actionDateTime) {
-      const dt = new Date(actionDateTime);
-      if (!isNaN(dt.getTime())) {
-        parsedActionDateTime = dt;
-      }
-    }
-
-    // Auto-set performerId to authenticated user session (never allow spoofing)
-    const action = await getPrisma().actionTaken.create({
-      data: {
-        ticketId: ticket.id,
-        performerId: authUser.id,
-        actionDateTime: parsedActionDateTime,
-        description: description.trim(),
-        result: result.trim(),
-        followUpRequired: isFollowUpRequired,
-        followUpNote: isFollowUpRequired ? followUpNote.trim() : null,
-        attachmentNotes: attachmentNotes && typeof attachmentNotes === "string" && attachmentNotes.trim()
-          ? attachmentNotes.trim()
-          : null,
-      },
-      include: {
-        performedBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            role: true,
+    // Atomic creation and ticket claim race protection in single transaction
+    const { action, currentOwnerId } = await getPrisma().$transaction(async (tx) => {
+      // Auto-set performerId to authenticated user session (never allow spoofing)
+      const createdAction = await tx.actionTaken.create({
+        data: {
+          ticketId: ticket.id,
+          performerId: authUser.id,
+          actionDateTime: parsedActionDateTime,
+          description: description.trim(),
+          result: result.trim(),
+          followUpRequired: isFollowUpRequired,
+          followUpNote: isFollowUpRequired ? followUpNote.trim() : null,
+          attachmentNotes:
+            attachmentNotes && typeof attachmentNotes === "string" && attachmentNotes.trim()
+              ? attachmentNotes.trim()
+              : null,
+        },
+        include: {
+          performedBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+            },
           },
         },
-      },
-    });
-
-    let currentOwnerId = ticket.ownerId;
-    if (claimTicket === true && !ticket.ownerId) {
-      const updatedTicket = await getPrisma().ticket.update({
-        where: { id: ticket.id },
-        data: { ownerId: authUser.id },
       });
-      currentOwnerId = updatedTicket.ownerId;
-    }
+
+      let ownerId = ticket.ownerId;
+      if (claimTicket === true) {
+        const claimResult = await tx.ticket.updateMany({
+          where: { id: ticket.id, ownerId: null },
+          data: { ownerId: authUser.id },
+        });
+        if (claimResult.count > 0) {
+          ownerId = authUser.id;
+        } else {
+          const currentTicket = await tx.ticket.findUnique({
+            where: { id: ticket.id },
+            select: { ownerId: true },
+          });
+          ownerId = currentTicket?.ownerId ?? null;
+        }
+      }
+
+      return { action: createdAction, currentOwnerId: ownerId };
+    });
 
     return res.status(201).json({
       action,
@@ -291,6 +322,16 @@ actionsRouter.patch("/:actionId", async (req: Request, res: Response) => {
       });
     }
 
+    // Terminal tickets (CLOSED, CANCELLED) cannot accept action updates
+    if (ticket.currentStatus === TicketStatus.CLOSED || ticket.currentStatus === TicketStatus.CANCELLED) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_INPUT",
+          message: `Cannot update actions on a ticket with terminal status ${ticket.currentStatus}.`,
+        },
+      });
+    }
+
     const existingAction = await getPrisma().actionTaken.findFirst({
       where: {
         id: actionId,
@@ -326,21 +367,35 @@ actionsRouter.patch("/:actionId", async (req: Request, res: Response) => {
       expectedUpdatedAt,
     } = req.body || {};
 
-    // Optimistic Concurrency Control (OCC)
-    if (expectedUpdatedAt) {
-      const expectedTime = new Date(expectedUpdatedAt).getTime();
-      const actualTime = new Date(existingAction.updatedAt).getTime();
-      if (Math.abs(expectedTime - actualTime) > 1000) {
-        return res.status(409).json({
-          error: {
-            code: "STALE_UPDATE",
-            message: "Stale update detected. Another user modified this action taken.",
-          },
-        });
-      }
+    // OCC: expectedUpdatedAt must be supplied and be a valid ISO date string (BR-16)
+    if (
+      !expectedUpdatedAt ||
+      typeof expectedUpdatedAt !== "string" ||
+      isNaN(new Date(expectedUpdatedAt).getTime())
+    ) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_INPUT",
+          message: "expectedUpdatedAt is required and must be a valid ISO date string for optimistic concurrency control.",
+          details: [
+            {
+              field: "expectedUpdatedAt",
+              issue: "expectedUpdatedAt is required and must be a valid ISO date string.",
+            },
+          ],
+        },
+      });
     }
 
     const validationDetails: Array<{ field: string; issue: string }> = [];
+
+    // Reject non-boolean followUpRequired
+    if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
+      validationDetails.push({
+        field: "followUpRequired",
+        issue: "followUpRequired must be a boolean (true or false).",
+      });
+    }
 
     if (description !== undefined) {
       if (typeof description !== "string" || description.trim().length < 10) {
@@ -418,8 +473,13 @@ actionsRouter.patch("/:actionId", async (req: Request, res: Response) => {
       });
     }
 
-    const updated = await getPrisma().actionTaken.update({
-      where: { id: existingAction.id },
+    // Atomic OCC comparison using updateMany matching exact updatedAt timestamp
+    const updateResult = await getPrisma().actionTaken.updateMany({
+      where: {
+        id: existingAction.id,
+        ticketId: ticket.id,
+        updatedAt: new Date(expectedUpdatedAt),
+      },
       data: {
         description: description !== undefined ? description.trim() : undefined,
         result: result !== undefined ? result.trim() : undefined,
@@ -430,6 +490,19 @@ actionsRouter.patch("/:actionId", async (req: Request, res: Response) => {
             ? (attachmentNotes && typeof attachmentNotes === "string" ? attachmentNotes.trim() : null)
             : undefined,
       },
+    });
+
+    if (updateResult.count === 0) {
+      return res.status(409).json({
+        error: {
+          code: "STALE_UPDATE",
+          message: "Stale update detected. Another user modified this action taken.",
+        },
+      });
+    }
+
+    const updated = await getPrisma().actionTaken.findUnique({
+      where: { id: existingAction.id },
       include: {
         performedBy: {
           select: {
