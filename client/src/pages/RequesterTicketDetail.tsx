@@ -244,16 +244,6 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
     }
   };
 
-  const handleRefreshTicket = async () => {
-    if (!ticketId) return;
-    try {
-      const ticketData = await fetchTicketDetail(ticketId);
-      setTicket(ticketData);
-      setAttachments(ticketData.attachments || []);
-    } catch {
-      // ignore
-    }
-  };
 
   if (loading) {
     return (

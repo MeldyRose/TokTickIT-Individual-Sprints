@@ -9,6 +9,7 @@ import { RequestedPriority, ITPriority, TicketStatus, Role } from "@prisma/clien
 import { authRouter } from "./routes/auth.js";
 import { adminUsersRouter } from "./routes/adminUsers.js";
 import { actionsRouter } from "./routes/actions.js";
+import { dashboardRouter } from "./routes/dashboard.js";
 import { resolveAuthUser } from "./utils/auth.js";
 import { sessionStore } from "./services/sessionStore.js";
 import { isValidStatusTransition, getPermittedNextStatuses } from "./utils/statusMatrix.js";
@@ -33,6 +34,7 @@ app.use(express.json());
 app.use("/api/auth", authRouter);
 app.use("/api/admin/users", adminUsersRouter);
 app.use("/api/tickets/:id/actions", actionsRouter);
+app.use("/api/dashboard", dashboardRouter);
 
 
 
