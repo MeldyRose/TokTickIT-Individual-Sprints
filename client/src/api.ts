@@ -144,6 +144,9 @@ export interface TicketDetail {
   requester: { id: string; name: string; email: string };
   createdAt: string;
   updatedAt: string;
+  resolutionSummary?: string | null;
+  resolvedAt?: string | null;
+  closedAt?: string | null;
   ownerId?: string | null;
   owner?: { id: string; name: string; email: string } | null;
   attachments: AttachmentMetadata[];
@@ -351,18 +354,28 @@ export async function updateRequesterTicketStatus(
   ticketId: string,
   status: string,
   comment?: string,
-  expectedUpdatedAt?: string
+  expectedUpdatedAt?: string,
+  resolutionSummary?: string
 ): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus; updatedAt?: string }> {
+  const payload: any = { status };
+  if (comment !== undefined) payload.comment = comment;
+  if (expectedUpdatedAt !== undefined) payload.expectedUpdatedAt = expectedUpdatedAt;
+  if (resolutionSummary !== undefined) payload.resolutionSummary = resolutionSummary;
+
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}/status`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ status, comment, expectedUpdatedAt }),
+    body: JSON.stringify(payload),
   });
-  const json = await res.json();
+  const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const errorMsg = json?.error?.message || json?.error || "Failed to update status";
-    throw new Error(errorMsg);
+    const error: any = new Error(errorMsg);
+    error.status = res.status;
+    error.code = json?.error?.code;
+    error.details = json?.error?.details;
+    throw error;
   }
   return json;
 }
@@ -371,9 +384,23 @@ export async function updateTicketStatus(
   ticketId: string,
   status: string,
   comment?: string,
-  expectedUpdatedAt?: string
+  expectedUpdatedAt?: string,
+  resolutionSummary?: string
 ): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus; updatedAt?: string }> {
-  return updateRequesterTicketStatus(ticketId, status, comment, expectedUpdatedAt);
+  return updateRequesterTicketStatus(ticketId, status, comment, expectedUpdatedAt, resolutionSummary);
+}
+
+export async function fetchTicketActionsCount(ticketId: string): Promise<number> {
+  try {
+    const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, {
+      credentials: "include",
+    });
+    if (!res.ok) return 0;
+    const json = await res.json().catch(() => ({}));
+    return json?.totalActions ?? (Array.isArray(json?.actions) ? json.actions.length : 0);
+  } catch {
+    return 0;
+  }
 }
 
 export async function claimOrReassignOwner(
