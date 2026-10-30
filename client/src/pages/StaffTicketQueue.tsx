@@ -10,18 +10,41 @@ import {
 } from "../api";
 import { StatusBadge, PriorityBadge } from "../components/Badge";
 
-interface StaffTicketQueueProps {
-  onSelectTicket: (ticketId: string) => void;
+export interface QueueInitialFilters {
+  ownership?: string;
+  status?: string;
+  priority?: string;
+  search?: string;
+  categoryId?: string;
 }
 
-export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTicket }) => {
+interface StaffTicketQueueProps {
+  onSelectTicket: (ticketId: string) => void;
+  initialFilters?: QueueInitialFilters;
+}
+
+export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTicket, initialFilters }) => {
   // Filters and Control States
-  const [searchInput, setSearchInput] = useState<string>("");
-  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
-  const [categoryId, setCategoryId] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [priorityFilter, setPriorityFilter] = useState<string>("");
-  const [ownerFilter, setOwnerFilter] = useState<string>("all");
+  const [searchInput, setSearchInput] = useState<string>(initialFilters?.search || "");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(initialFilters?.search || "");
+  const [categoryId, setCategoryId] = useState<string>(initialFilters?.categoryId || "");
+  const [statusFilter, setStatusFilter] = useState<string>(initialFilters?.status || "");
+  const [priorityFilter, setPriorityFilter] = useState<string>(initialFilters?.priority || "");
+  const [ownerFilter, setOwnerFilter] = useState<string>(initialFilters?.ownership || "all");
+
+  useEffect(() => {
+    if (initialFilters) {
+      if (initialFilters.search !== undefined) {
+        setSearchInput(initialFilters.search);
+        setDebouncedSearch(initialFilters.search);
+      }
+      if (initialFilters.categoryId !== undefined) setCategoryId(initialFilters.categoryId);
+      if (initialFilters.status !== undefined) setStatusFilter(initialFilters.status);
+      if (initialFilters.priority !== undefined) setPriorityFilter(initialFilters.priority);
+      if (initialFilters.ownership !== undefined) setOwnerFilter(initialFilters.ownership);
+      setPage(1);
+    }
+  }, [initialFilters]);
   const [sortOption, setSortOption] = useState<string>("createdAt-desc");
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
