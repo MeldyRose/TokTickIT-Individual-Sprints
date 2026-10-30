@@ -66,17 +66,11 @@ dashboardRouter.get("/requester", async (req: Request, res: Response) => {
           updatedAt: { gte: sevenDaysAgo },
         },
       }),
-      // Recently resolved tickets in past 7 days
+      // Recently resolved tickets in past 7 days strictly per BR-20 (resolvedAt within 7 days)
       prisma.ticket.count({
         where: {
           requesterId,
-          OR: [
-            { resolvedAt: { gte: sevenDaysAgo } },
-            {
-              currentStatus: { in: [TicketStatus.RESOLVED, TicketStatus.CLOSED] },
-              updatedAt: { gte: sevenDaysAgo },
-            },
-          ],
+          resolvedAt: { gte: sevenDaysAgo },
         },
       }),
       // Top 5 recent tickets for the requester
@@ -260,32 +254,42 @@ dashboardRouter.get("/staff", async (req: Request, res: Response) => {
     const { avgMinutes, formatted: avgResolutionFormatted } =
       calculateAverageResolution(resolved30d);
 
-    // Format breakdown distributions
+    // Format breakdown distributions ensuring all enum values are present (even when count is 0)
     const totalStatusCount = statusGroup.reduce(
       (sum, g) => sum + g._count.currentStatus,
       0
     );
-    const byStatus = statusGroup.map((g) => ({
-      status: g.currentStatus,
-      count: g._count.currentStatus,
-      percentage:
-        totalStatusCount > 0
-          ? Number(((g._count.currentStatus / totalStatusCount) * 100).toFixed(1))
-          : 0,
-    }));
+    const statusMap = new Map(statusGroup.map((g) => [g.currentStatus, g._count.currentStatus]));
+    const allStatuses = Object.values(TicketStatus);
+    const byStatus = allStatuses.map((status) => {
+      const count = statusMap.get(status) || 0;
+      return {
+        status,
+        count,
+        percentage:
+          totalStatusCount > 0
+            ? Number(((count / totalStatusCount) * 100).toFixed(1))
+            : 0,
+      };
+    });
 
     const totalPriorityCount = priorityGroup.reduce(
       (sum, g) => sum + g._count.itPriority,
       0
     );
-    const byPriority = priorityGroup.map((g) => ({
-      priority: g.itPriority,
-      count: g._count.itPriority,
-      percentage:
-        totalPriorityCount > 0
-          ? Number(((g._count.itPriority / totalPriorityCount) * 100).toFixed(1))
-          : 0,
-    }));
+    const priorityMap = new Map(priorityGroup.map((g) => [g.itPriority, g._count.itPriority]));
+    const allPriorities = [ITPriority.URGENT, ITPriority.HIGH, ITPriority.MEDIUM, ITPriority.LOW];
+    const byPriority = allPriorities.map((priority) => {
+      const count = priorityMap.get(priority) || 0;
+      return {
+        priority,
+        count,
+        percentage:
+          totalPriorityCount > 0
+            ? Number(((count / totalPriorityCount) * 100).toFixed(1))
+            : 0,
+      };
+    });
 
     const recentTickets = recentTicketsRaw.map((t) => ({
       id: t.id,
@@ -414,27 +418,37 @@ dashboardRouter.get("/staff/breakdown", async (req: Request, res: Response) => {
       (sum, g) => sum + g._count.currentStatus,
       0
     );
-    const byStatus = statusGroup.map((g) => ({
-      status: g.currentStatus,
-      count: g._count.currentStatus,
-      percentage:
-        totalStatus > 0
-          ? Number(((g._count.currentStatus / totalStatus) * 100).toFixed(1))
-          : 0,
-    }));
+    const statusMap = new Map(statusGroup.map((g) => [g.currentStatus, g._count.currentStatus]));
+    const allStatuses = Object.values(TicketStatus);
+    const byStatus = allStatuses.map((status) => {
+      const count = statusMap.get(status) || 0;
+      return {
+        status,
+        count,
+        percentage:
+          totalStatus > 0
+            ? Number(((count / totalStatus) * 100).toFixed(1))
+            : 0,
+      };
+    });
 
     const totalPriority = priorityGroup.reduce(
       (sum, g) => sum + g._count.itPriority,
       0
     );
-    const byPriority = priorityGroup.map((g) => ({
-      priority: g.itPriority,
-      count: g._count.itPriority,
-      percentage:
-        totalPriority > 0
-          ? Number(((g._count.itPriority / totalPriority) * 100).toFixed(1))
-          : 0,
-    }));
+    const priorityMap = new Map(priorityGroup.map((g) => [g.itPriority, g._count.itPriority]));
+    const allPriorities = [ITPriority.URGENT, ITPriority.HIGH, ITPriority.MEDIUM, ITPriority.LOW];
+    const byPriority = allPriorities.map((priority) => {
+      const count = priorityMap.get(priority) || 0;
+      return {
+        priority,
+        count,
+        percentage:
+          totalPriority > 0
+            ? Number(((count / totalPriority) * 100).toFixed(1))
+            : 0,
+      };
+    });
 
     const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
     const totalCategory = categoryGroup.reduce(

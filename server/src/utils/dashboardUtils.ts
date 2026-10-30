@@ -27,12 +27,22 @@ export function getDaysAgo(days: number, referenceDate: Date = new Date()): Date
 }
 
 /**
- * Formats a duration in minutes to human readable string (e.g., "3h 45m", "45m", "0m")
+ * Formats a duration in minutes to human readable string (e.g., "5d 5h 8m", "3h 45m", "45m", "0m")
  */
 export function formatResolutionMinutes(minutes: number): string {
   if (!minutes || minutes <= 0) return "0m";
-  const hours = Math.floor(minutes / 60);
-  const remainingMins = minutes % 60;
+
+  const totalMinutes = Math.round(minutes);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const remainingMins = totalMinutes % 60;
+
+  if (days > 0) {
+    const parts: string[] = [`${days}d`];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (remainingMins > 0) parts.push(`${remainingMins}m`);
+    return parts.join(" ");
+  }
 
   if (hours === 0) {
     return `${remainingMins}m`;

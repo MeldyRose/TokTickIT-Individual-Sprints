@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
 import { getPrisma } from "../../src/prisma.js";
 import bcrypt from "bcryptjs";
-import { Role, TicketStatus, ITPriority, RequestedPriority } from "@prisma/client";
+import { Role, TicketStatus } from "@prisma/client";
 
 describe("Lab 4: Requester Dashboard API (requester-dashboard.api.test.ts)", () => {
   const prisma = getPrisma();
@@ -26,10 +26,10 @@ describe("Lab 4: Requester Dashboard API (requester-dashboard.api.test.ts)", () 
   let testCategory: any;
   let testSystem: any;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
     const passwordHash = bcrypt.hashSync("Password123!", 10);
 
-    // 1. Setup users
+    // 1. Setup users once in beforeAll to prevent concurrency interference across parallel suites
     requesterA = await prisma.user.upsert({
       where: { email: "requester.a.dash@toktickit.com" },
       update: { role: Role.REQUESTER, isActive: true, mustChangePassword: false, passwordHash },
@@ -99,14 +99,7 @@ describe("Lab 4: Requester Dashboard API (requester-dashboard.api.test.ts)", () 
     testCategory = await prisma.category.findFirst({ where: { isActive: true } });
     testSystem = await prisma.relatedSystem.findFirst({ where: { isActive: true } });
 
-    // 3. Clear existing test tickets for these requesters to ensure deterministic counts
-    await prisma.ticket.deleteMany({
-      where: {
-        requesterId: { in: [requesterA.id, requesterB.id, emptyRequester.id] },
-      },
-    });
-
-    // 4. Authenticate users
+    // 3. Authenticate users once in beforeAll
     const loginA = await request(app)
       .post("/api/auth/login")
       .send({ email: "requester.a.dash@toktickit.com", password: "Password123!" });
@@ -131,6 +124,29 @@ describe("Lab 4: Requester Dashboard API (requester-dashboard.api.test.ts)", () 
       .post("/api/auth/login")
       .send({ email: "admin.dash.test@toktickit.com", password: "Password123!" });
     adminToken = loginAdmin.headers["set-cookie"]?.[0]?.split(";")[0]?.split("=")[1] || "";
+  });
+
+  afterAll(async () => {
+    // Clean up created tickets and users to ensure clean state
+    await prisma.ticket.deleteMany({
+      where: {
+        requesterId: { in: [requesterA.id, requesterB.id, emptyRequester.id] },
+      },
+    });
+    await prisma.user.deleteMany({
+      where: {
+        id: { in: [requesterA.id, requesterB.id, emptyRequester.id, staffUser.id, adminUser.id] },
+      },
+    });
+  });
+
+  beforeEach(async () => {
+    // Clean up only our suite's tickets between tests
+    await prisma.ticket.deleteMany({
+      where: {
+        requesterId: { in: [requesterA.id, requesterB.id, emptyRequester.id] },
+      },
+    });
   });
 
   describe("1. Authentication & Role-Based Authorization", () => {
@@ -260,7 +276,7 @@ describe("Lab 4: Requester Dashboard API (requester-dashboard.api.test.ts)", () 
   });
 
   describe("3. Authoritative Metric Calculations & Active Status Rules", () => {
-    it("correctly includes active statuses and excludes terminal/cancelled statuses", async () => {
+    it("correctly includes active statuses, excludes terminal/cancelled statuses, and strictly counts resolvedAt within 7 days (BR-20)", async () => {
       // Create one of each status for Requester A
       const statusesToTest = [
         TicketStatus.NEW,
@@ -268,13 +284,23 @@ describe("Lab 4: Requester Dashboard API (requester-dashboard.api.test.ts)", () 
         TicketStatus.IN_PROGRESS,
         TicketStatus.WAITING_FOR_REQUESTER,
         TicketStatus.REOPENED,
-        TicketStatus.RESOLVED,
-        TicketStatus.CLOSED,
+        TicketStatus.RESOLVED, // resolved today -> counted in recentlyResolved
+        TicketStatus.CLOSED,   // resolved 30 days ago and closed yesterday -> must NOT be counted in recentlyResolved
         TicketStatus.CANCELLED,
       ];
 
       for (let i = 0; i < statusesToTest.length; i++) {
         const st = statusesToTest[i];
+        let resolvedAt: Date | null = null;
+        let closedAt: Date | null = null;
+
+        if (st === TicketStatus.RESOLVED) {
+          resolvedAt = new Date(); // today -> within 7 days
+        } else if (st === TicketStatus.CLOSED) {
+          resolvedAt = new Date(Date.now() - 30 * 86400 * 1000); // 30 days ago -> older than 7 days
+          closedAt = new Date(); // closed yesterday/today
+        }
+
         await prisma.ticket.create({
           data: {
             ticketNumber: `TCK-STATUS-${i}`,
@@ -284,8 +310,8 @@ describe("Lab 4: Requester Dashboard API (requester-dashboard.api.test.ts)", () 
             relatedSystemId: testSystem.id,
             requesterId: requesterA.id,
             currentStatus: st,
-            resolvedAt: st === TicketStatus.RESOLVED ? new Date() : null,
-            closedAt: st === TicketStatus.CLOSED ? new Date() : null,
+            resolvedAt,
+            closedAt,
             resolutionSummary: st === TicketStatus.RESOLVED ? "Resolution summary for ticket" : null,
           },
         });
@@ -299,8 +325,9 @@ describe("Lab 4: Requester Dashboard API (requester-dashboard.api.test.ts)", () 
       // Active statuses: NEW, OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, REOPENED (5 active)
       expect(res.body.metrics.totalOpen).toBe(5);
       expect(res.body.metrics.waitingForRequester).toBe(1);
-      // Resolved / Closed in past 7 days: 2 (RESOLVED, CLOSED)
-      expect(res.body.metrics.recentlyResolved).toBe(2);
+      // Recently resolved per BR-20: strictly resolvedAt within last 7 days (only RESOLVED ticket, NOT CLOSED with resolvedAt 30d ago)
+      expect(res.body.metrics.recentlyResolved).toBe(1);
+      expect(res.body.metrics.resolvedRecently).toBe(1);
     });
   });
 
