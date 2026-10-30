@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { TicketStatus } from "../api";
 
+export interface ErrorDetail {
+  criterion: string;
+  message: string;
+}
+
 interface StatusTransitionModalProps {
   targetStatus: TicketStatus | null;
   isOpen: boolean;
@@ -8,6 +13,9 @@ interface StatusTransitionModalProps {
   onConfirm: (resolutionSummary?: string, comment?: string) => Promise<void> | void;
   isSubmitting?: boolean;
   errorMessage?: string | null;
+  errorDetails?: ErrorDetail[] | null;
+  actionsCount?: number | null;
+  ticketNumber?: string;
 }
 
 export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
@@ -17,15 +25,20 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
   onConfirm,
   isSubmitting = false,
   errorMessage = null,
+  errorDetails = null,
+  actionsCount = null,
+  ticketNumber,
 }) => {
   const [resolutionSummary, setResolutionSummary] = useState("");
   const [closureComment, setClosureComment] = useState("");
+  const [cancellationReason, setCancellationReason] = useState("");
   const [touched, setTouched] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setResolutionSummary("");
       setClosureComment("");
+      setCancellationReason("");
       setTouched(false);
     }
   }, [isOpen, targetStatus]);
@@ -34,9 +47,22 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
 
   const isResolving = targetStatus === "RESOLVED";
   const isClosing = targetStatus === "CLOSED";
+  const isCancelling = targetStatus === "CANCELLED";
 
-  const isResolutionValid = resolutionSummary.trim().length >= 10 && resolutionSummary.trim().length <= 2000;
-  const canSubmit = isResolving ? isResolutionValid : true;
+  // Check actions taken precondition from props or 422 error details
+  const hasActionPrerequisiteFailure = errorDetails?.some(
+    (d) => d.criterion === "MISSING_ACTION_TAKEN"
+  );
+  const effectiveActionsCount = hasActionPrerequisiteFailure ? 0 : actionsCount;
+  const actionsSatisfied =
+    effectiveActionsCount === null || effectiveActionsCount === undefined || effectiveActionsCount >= 1;
+
+  const isResolutionValid =
+    resolutionSummary.trim().length >= 10 && resolutionSummary.trim().length <= 2000;
+
+  const canSubmit = isResolving
+    ? isResolutionValid && actionsSatisfied
+    : true;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +73,8 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
       onConfirm(resolutionSummary.trim(), undefined);
     } else if (isClosing) {
       onConfirm(undefined, closureComment.trim() || undefined);
+    } else if (isCancelling) {
+      onConfirm(undefined, cancellationReason.trim() || undefined);
     } else {
       onConfirm();
     }
@@ -56,6 +84,8 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
     ? "resolve-modal"
     : isClosing
     ? "close-ticket-modal"
+    : isCancelling
+    ? "cancel-ticket-modal"
     : "status-transition-modal";
 
   return (
@@ -76,6 +106,8 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                   ? "Confirm Ticket Resolution"
                   : isClosing
                   ? "Confirm Ticket Closure"
+                  : isCancelling
+                  ? "Confirm Ticket Cancellation"
                   : `Transition to ${targetStatus}`}
               </h5>
               <button
@@ -84,7 +116,13 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                 aria-label="Close"
                 onClick={onClose}
                 disabled={isSubmitting}
-                data-testid={isResolving ? "cancel-resolve-btn" : "modal-close-x-btn"}
+                data-testid={
+                  isResolving
+                    ? "cancel-resolve-btn"
+                    : isClosing
+                    ? "modal-close-x-btn"
+                    : "cancel-transition-x-btn"
+                }
               />
             </div>
 
@@ -95,12 +133,80 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                   role="alert"
                   data-testid="resolution-gate-error"
                 >
-                  {errorMessage}
+                  <div className="fw-semibold">{errorMessage}</div>
+                  {errorDetails && errorDetails.length > 0 && (
+                    <ul className="mb-0 mt-1 ps-3" data-testid="resolution-gate-error-details">
+                      {errorDetails.map((det, idx) => (
+                        <li key={idx} data-testid={`gate-error-detail-${det.criterion.toLowerCase()}`}>
+                          {det.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
 
+              {/* RESOLVED: Resolution Gate Verification Checklist & Remediation Input (Spec 3.4 / 6.4) */}
               {isResolving && (
                 <div>
+                  {/* Live Verification Checklist */}
+                  <div
+                    className="mb-3 p-3 rounded"
+                    style={{ backgroundColor: "#F8F9FA", border: "1px solid #E9ECEF" }}
+                    data-testid="resolution-gate-checklist"
+                  >
+                    <div className="small fw-bold text-dark mb-2">Resolution Gate Prerequisites:</div>
+                    
+                    {/* Criterion 1: Actions Taken recorded */}
+                    <div
+                      className="d-flex align-items-center gap-2 mb-2 small"
+                      data-testid="gate-criterion-actions"
+                    >
+                      {effectiveActionsCount === null || effectiveActionsCount === undefined ? (
+                        <>
+                          <span className="text-success fw-bold">✓</span>
+                          <span className="text-muted">At least 1 Action Taken recorded</span>
+                        </>
+                      ) : effectiveActionsCount >= 1 ? (
+                        <>
+                          <span className="text-success fw-bold">✓</span>
+                          <span className="text-success">
+                            At least 1 Action Taken recorded ({effectiveActionsCount} logged)
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-danger fw-bold">✕</span>
+                          <span className="text-danger fw-semibold">
+                            No Actions Taken logged. At least one action must be recorded before resolving.
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Criterion 2: Resolution Summary provided (min 10 characters) */}
+                    <div
+                      className="d-flex align-items-center gap-2 small"
+                      data-testid="gate-criterion-summary"
+                    >
+                      {isResolutionValid ? (
+                        <>
+                          <span className="text-success fw-bold">✓</span>
+                          <span className="text-success">
+                            Resolution Summary provided ({resolutionSummary.trim().length} / 2000 characters)
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-warning fw-bold">○</span>
+                          <span className="text-muted">
+                            Resolution Summary provided (min 10 characters)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="mb-3">
                     <label
                       htmlFor="resolution-summary-field"
@@ -145,6 +251,7 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                       </div>
                     )}
                   </div>
+
                   <div
                     className="p-3 rounded small"
                     style={{ backgroundColor: "#EAF6EF", border: "1px solid #D8E0DC" }}
@@ -159,17 +266,18 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                 </div>
               )}
 
+              {/* CLOSED: Formal Closure Review Dialog */}
               {isClosing && (
                 <div>
                   <p className="text-muted mb-3">
-                    Are you sure you want to formally close this ticket? This will mark the ticket as closed and finalize the record.
+                    Are you sure you want to formally close ticket {ticketNumber ? <strong>{ticketNumber}</strong> : "this ticket"}? This will mark the ticket as closed and finalize the record.
                   </p>
                   <div className="mb-3">
                     <label
                       htmlFor="close-notes-field"
                       className="form-label small fw-semibold text-secondary mb-1"
                     >
-                      Closure Remarks (Optional)
+                      Closure Remarks (Optional — visible to requester)
                     </label>
                     <textarea
                       id="close-notes-field"
@@ -182,11 +290,52 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                       data-testid="close-notes-input"
                       aria-label="Closure Remarks"
                     />
+                    <div className="form-text small text-muted">
+                      Note: This remark will be posted as a public comment visible to the requester.
+                    </div>
                   </div>
                 </div>
               )}
 
-              {!isResolving && !isClosing && (
+              {/* CANCELLED: Confirmation Step for Terminal Cancellation (Fix 1) */}
+              {isCancelling && (
+                <div>
+                  <div
+                    className="alert alert-warning py-2 small mb-3"
+                    role="alert"
+                    data-testid="cancel-terminal-warning"
+                  >
+                    ⚠️ <strong>Warning:</strong> Cancellation is a terminal status. Once cancelled, no further transitions or action logging will be permitted on this ticket.
+                  </div>
+                  <p className="text-muted mb-3">
+                    Are you sure you want to cancel ticket {ticketNumber ? <strong>{ticketNumber}</strong> : "this ticket"}?
+                  </p>
+                  <div className="mb-3">
+                    <label
+                      htmlFor="cancel-notes-field"
+                      className="form-label small fw-semibold text-secondary mb-1"
+                    >
+                      Cancellation Reason / Remarks (Optional — visible to requester)
+                    </label>
+                    <textarea
+                      id="cancel-notes-field"
+                      className="form-control"
+                      rows={3}
+                      placeholder="Please specify why this ticket is being cancelled..."
+                      value={cancellationReason}
+                      onChange={(e) => setCancellationReason(e.target.value)}
+                      disabled={isSubmitting}
+                      data-testid="cancel-notes-input"
+                      aria-label="Cancellation Reason"
+                    />
+                    <div className="form-text small text-muted">
+                      Note: This remark will be posted as a public comment visible to the requester.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!isResolving && !isClosing && !isCancelling && (
                 <p className="text-muted mb-0">
                   Are you sure you want to update the ticket status to{" "}
                   <strong>{targetStatus}</strong>?
@@ -205,6 +354,8 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                     ? "cancel-resolve-btn"
                     : isClosing
                     ? "cancel-close-btn"
+                    : isCancelling
+                    ? "cancel-cancellation-btn"
                     : "cancel-transition-btn"
                 }
               >
@@ -212,14 +363,20 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="btn btn-sm text-white px-3 fw-semibold"
-                style={{ backgroundColor: "#006B3C" }}
+                className={
+                  isCancelling
+                    ? "btn btn-danger btn-sm text-white px-3 fw-semibold"
+                    : "btn btn-sm text-white px-3 fw-semibold"
+                }
+                style={isCancelling ? undefined : { backgroundColor: "#006B3C" }}
                 disabled={!canSubmit || isSubmitting}
                 data-testid={
                   isResolving
                     ? "confirm-resolve-btn"
                     : isClosing
                     ? "confirm-close-btn"
+                    : isCancelling
+                    ? "confirm-cancel-btn"
                     : "confirm-transition-btn"
                 }
               >
@@ -236,6 +393,8 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                   "Confirm & Resolve Ticket"
                 ) : isClosing ? (
                   "Confirm & Close Ticket"
+                ) : isCancelling ? (
+                  "Confirm & Cancel Ticket"
                 ) : (
                   "Confirm Transition"
                 )}

@@ -71,16 +71,27 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
     }
   };
 
-  const handleWorkflowStatusUpdated = async (newStatus: any) => {
-    if (ticket) {
-      setTicket({ ...ticket, currentStatus: newStatus });
-    }
+  const handleWorkflowStatusUpdated = async (newStatus: any, resolutionSummary?: string) => {
+    setTicket((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentStatus: newStatus,
+            resolutionSummary: resolutionSummary !== undefined ? resolutionSummary : prev.resolutionSummary,
+          }
+        : null
+    );
     try {
       const [ticketData, commentsData] = await Promise.all([
         fetchTicketDetail(ticketId),
         fetchPublicComments(ticketId).catch(() => comments),
       ]);
-      setTicket(ticketData);
+      setTicket({
+        ...ticketData,
+        currentStatus: newStatus || ticketData.currentStatus,
+        resolutionSummary:
+          ticketData.resolutionSummary ?? resolutionSummary ?? null,
+      });
       setComments(commentsData || []);
     } catch {
       // Keep optimistic update
@@ -311,6 +322,7 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
       {ticket && (user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR") && (
         <TicketWorkflowControls
           ticket={ticket}
+          comments={comments}
           onStatusUpdated={handleWorkflowStatusUpdated}
           onRefreshTicket={handleRefreshTicket}
         />
@@ -414,13 +426,15 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
           <div className="col-12">
             <label className="form-label small fw-semibold text-secondary mb-1">Resolution Summary</label>
             <textarea
-              className="form-control form-control-sm bg-light text-muted fst-italic"
+              className="form-control form-control-sm bg-light font-monospace"
               rows={2}
               readOnly
+              data-testid="detail-resolution-summary"
               value={
-                ticket.currentStatus === "RESOLVED" || ticket.currentStatus === "CLOSED"
-                  ? "Issue resolved."
-                  : "No resolution summary available yet."
+                ticket.resolutionSummary ||
+                (ticket.currentStatus === "RESOLVED" || ticket.currentStatus === "CLOSED"
+                  ? "No resolution summary provided."
+                  : "No resolution summary available yet.")
               }
             />
           </div>

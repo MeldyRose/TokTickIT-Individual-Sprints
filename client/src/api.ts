@@ -144,6 +144,9 @@ export interface TicketDetail {
   requester: { id: string; name: string; email: string };
   createdAt: string;
   updatedAt: string;
+  resolutionSummary?: string | null;
+  resolvedAt?: string | null;
+  closedAt?: string | null;
   attachments: AttachmentMetadata[];
 }
 
@@ -383,6 +386,19 @@ export async function updateTicketStatus(
   resolutionSummary?: string
 ): Promise<{ message: string; ticketId: string; currentStatus: TicketStatus; updatedAt?: string }> {
   return updateRequesterTicketStatus(ticketId, status, comment, expectedUpdatedAt, resolutionSummary);
+}
+
+export async function fetchTicketActionsCount(ticketId: string): Promise<number> {
+  try {
+    const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, {
+      credentials: "include",
+    });
+    if (!res.ok) return 0;
+    const json = await res.json().catch(() => ({}));
+    return json?.totalActions ?? (Array.isArray(json?.actions) ? json.actions.length : 0);
+  } catch {
+    return 0;
+  }
 }
 
 export async function claimOrReassignOwner(

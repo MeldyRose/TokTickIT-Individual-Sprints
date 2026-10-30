@@ -47,6 +47,7 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
     requester: { id: "u_req_1", name: "Jennifer Anderson", email: "jennifer@toktickit.com" },
     createdAt: "2026-10-30T00:00:00.000Z",
     updatedAt: "2026-10-30T00:10:00.000Z",
+    resolutionSummary: null,
     attachments: [],
   });
 
@@ -173,11 +174,12 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
     });
   });
 
-  describe("2. Resolution Verification Prompt & Review Modals (AC-02)", () => {
-    it("opens Resolution Gate confirmation modal when RESOLVED is selected and enforces min 10 chars summary", async () => {
+  describe("2. Resolution Verification Prompt & Review Modals (AC-02, Fixes 1-3)", () => {
+    it("opens Resolution Gate confirmation modal with live checklist when RESOLVED is selected and enforces min 10 chars summary", async () => {
       mockAuth(staffUser);
       const ticket = createMockTicket("IN_PROGRESS");
       const onStatusUpdated = vi.fn();
+      vi.spyOn(api, "fetchTicketActionsCount").mockResolvedValue(2);
       vi.spyOn(api, "updateTicketStatus").mockResolvedValue({
         message: "Ticket status updated",
         ticketId: "tkt-100",
@@ -200,6 +202,11 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
       // Resolution modal opens
       expect(await screen.findByTestId("resolve-modal")).toBeInTheDocument();
       expect(screen.getByText(/Confirm Ticket Resolution/i)).toBeInTheDocument();
+
+      // Live checklist (Spec 3.4.2 / 6.4)
+      expect(screen.getByTestId("resolution-gate-checklist")).toBeInTheDocument();
+      expect(screen.getByTestId("gate-criterion-actions")).toBeInTheDocument();
+      expect(screen.getByTestId("gate-criterion-summary")).toBeInTheDocument();
 
       const confirmBtn = screen.getByTestId("confirm-resolve-btn");
       const summaryInput = screen.getByTestId("resolution-summary-input");
@@ -241,7 +248,7 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
       expect(screen.queryByTestId("resolve-modal")).not.toBeInTheDocument();
     });
 
-    it("opens Confirmation Modal when CLOSED is selected", async () => {
+    it("opens Confirmation Modal when CLOSED is selected and labels remarks as visible to requester (Fix 2)", async () => {
       mockAuth(staffUser);
       const ticket = createMockTicket("RESOLVED");
       vi.spyOn(api, "updateTicketStatus").mockResolvedValue({
@@ -264,6 +271,9 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
       expect(await screen.findByTestId("close-ticket-modal")).toBeInTheDocument();
       expect(screen.getByText(/Confirm Ticket Closure/i)).toBeInTheDocument();
 
+      // Verify closure remarks label explicitly marks visibility to requester (Fix 2)
+      expect(screen.getByText(/Closure Remarks \(Optional — visible to requester\)/i)).toBeInTheDocument();
+
       const confirmCloseBtn = screen.getByTestId("confirm-close-btn");
       fireEvent.click(confirmCloseBtn);
 
@@ -277,12 +287,15 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
         );
       });
     });
-  });
 
-  describe("3. Advisory Indicator for Requester Problem Resolution", () => {
-    it("renders advisory indicator for IT Staff when ticket is in WAITING_FOR_REQUESTER status", () => {
+    it("opens Confirmation Modal when CANCELLED is selected with terminal warning and remarks input (Fix 1)", async () => {
       mockAuth(staffUser);
-      const ticket = createMockTicket("WAITING_FOR_REQUESTER");
+      const ticket = createMockTicket("NEW");
+      vi.spyOn(api, "updateTicketStatus").mockResolvedValue({
+        message: "Ticket status updated",
+        ticketId: "tkt-100",
+        currentStatus: "CANCELLED",
+      });
 
       render(
         <TicketWorkflowControls
@@ -292,9 +305,125 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
         />
       );
 
+      // Click CANCELLED shortcut button
+      fireEvent.click(screen.getByTestId("transition-to-cancelled"));
+
+      // Verify modal opens with terminal cancellation warning
+      expect(await screen.findByTestId("cancel-ticket-modal")).toBeInTheDocument();
+      expect(screen.getByText(/Confirm Ticket Cancellation/i)).toBeInTheDocument();
+      expect(screen.getByTestId("cancel-terminal-warning")).toBeInTheDocument();
+
+      const notesInput = screen.getByTestId("cancel-notes-input");
+      fireEvent.change(notesInput, { target: { value: "Duplicate request cancelled by staff." } });
+
+      const confirmCancelBtn = screen.getByTestId("confirm-cancel-btn");
+      fireEvent.click(confirmCancelBtn);
+
+      await waitFor(() => {
+        expect(api.updateTicketStatus).toHaveBeenCalledWith(
+          "tkt-100",
+          "CANCELLED",
+          "Duplicate request cancelled by staff.",
+          "2026-10-30T00:10:00.000Z",
+          undefined
+        );
+      });
+    });
+
+    it("displays structured error.details and checklist warning on 422 Resolution Gate failure (Fix 3)", async () => {
+      mockAuth(staffUser);
+      const ticket = createMockTicket("IN_PROGRESS");
+      vi.spyOn(api, "fetchTicketActionsCount").mockResolvedValue(1);
+
+      const gateError: any = new Error("Ticket cannot be resolved until all resolution prerequisites are satisfied.");
+      gateError.status = 422;
+      gateError.code = "RESOLUTION_GATE_FAILED";
+      gateError.details = [
+        {
+          criterion: "MISSING_ACTION_TAKEN",
+          message: "At least one Action Taken must be logged before resolving this ticket.",
+        },
+      ];
+
+      vi.spyOn(api, "updateTicketStatus").mockRejectedValue(gateError);
+
+      render(
+        <TicketWorkflowControls
+          ticket={ticket}
+          onStatusUpdated={vi.fn()}
+          onRefreshTicket={vi.fn()}
+        />
+      );
+
+      // Trigger resolution modal
+      fireEvent.click(screen.getByTestId("transition-to-resolved"));
+      expect(await screen.findByTestId("resolve-modal")).toBeInTheDocument();
+
+      const summaryInput = screen.getByTestId("resolution-summary-input");
+      fireEvent.change(summaryInput, {
+        target: { value: "Replaced faulty switch power supply and validated link." },
+      });
+
+      const confirmBtn = screen.getByTestId("confirm-resolve-btn");
+      fireEvent.click(confirmBtn);
+
+      // Verify structured 422 error details rendered in alert
+      expect(await screen.findByTestId("resolution-gate-error")).toBeInTheDocument();
+      expect(screen.getByTestId("resolution-gate-error-details")).toBeInTheDocument();
+      expect(screen.getByTestId("gate-error-detail-missing_action_taken")).toHaveTextContent(
+        "At least one Action Taken must be logged before resolving this ticket."
+      );
+    });
+  });
+
+  describe("3. Advisory Indicator for Requester Problem Resolution (Nit 1)", () => {
+    it("renders advisory indicator for IT Staff when ticket is in WAITING_FOR_REQUESTER with requester resolution comment", () => {
+      mockAuth(staffUser);
+      const ticket = createMockTicket("WAITING_FOR_REQUESTER");
+      const requesterComment: api.PublicComment = {
+        id: "c-1",
+        ticketId: "tkt-100",
+        author: { id: "u_req_1", name: "Jennifer Anderson", role: "REQUESTER" },
+        content: "Problem appears resolved by Requester.",
+        createdAt: "2026-10-30T00:05:00.000Z",
+      };
+
+      render(
+        <TicketWorkflowControls
+          ticket={ticket}
+          comments={[requesterComment]}
+          onStatusUpdated={vi.fn()}
+          onRefreshTicket={vi.fn()}
+        />
+      );
+
       expect(screen.getByTestId("workflow-advisory-indicator")).toBeInTheDocument();
       expect(screen.getByTestId("requester-resolved-advisory")).toBeInTheDocument();
       expect(screen.getByText(/Requester Feedback \/ Resolution Advisory/i)).toBeInTheDocument();
+    });
+
+    it("does not render advisory indicator when staff set WAITING_FOR_REQUESTER themselves without requester resolution comment (Nit 1)", () => {
+      mockAuth(staffUser);
+      const ticket = createMockTicket("WAITING_FOR_REQUESTER");
+      const staffComment: api.PublicComment = {
+        id: "c-2",
+        ticketId: "tkt-100",
+        author: { id: "u_staff_1", name: "Alex Thompson", role: "IT_STAFF" },
+        content: "Waiting for user to test port connection.",
+        createdAt: "2026-10-30T00:06:00.000Z",
+      };
+
+      render(
+        <TicketWorkflowControls
+          ticket={ticket}
+          comments={[staffComment]}
+          onStatusUpdated={vi.fn()}
+          onRefreshTicket={vi.fn()}
+        />
+      );
+
+      // Staff set it themselves without requester resolution: indicator should NOT show
+      expect(screen.queryByTestId("workflow-advisory-indicator")).not.toBeInTheDocument();
     });
 
     it("does not render advisory indicator when ticket is in other statuses", () => {
@@ -348,16 +477,24 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
     });
   });
 
-  describe("5. Integration with RequesterTicketDetail Screen", () => {
-    it("renders workflow transition controls in RequesterTicketDetail for IT Staff and updates header on success", async () => {
+  describe("5. Integration with RequesterTicketDetail Screen (Fix 4)", () => {
+    it("renders workflow transition controls and displays ticket.resolutionSummary on resolution (Fix 4)", async () => {
       mockAuth(staffUser);
-      const ticket = createMockTicket("OPEN");
-      vi.spyOn(api, "fetchTicketDetail").mockResolvedValue(ticket);
+      let currentMockTicket = createMockTicket("OPEN");
+      vi.spyOn(api, "fetchTicketDetail").mockImplementation(async () => currentMockTicket);
       vi.spyOn(api, "fetchPublicComments").mockResolvedValue([]);
-      vi.spyOn(api, "updateTicketStatus").mockResolvedValue({
-        message: "Ticket status updated",
-        ticketId: "tkt-100",
-        currentStatus: "IN_PROGRESS",
+      vi.spyOn(api, "fetchTicketActionsCount").mockResolvedValue(1);
+      vi.spyOn(api, "updateTicketStatus").mockImplementation(async (_id, status, _comment, _occ, resSummary) => {
+        currentMockTicket = {
+          ...currentMockTicket,
+          currentStatus: status as api.TicketStatus,
+          resolutionSummary: resSummary || null,
+        };
+        return {
+          message: "Ticket status updated",
+          ticketId: "tkt-100",
+          currentStatus: status as api.TicketStatus,
+        };
       });
 
       render(<RequesterTicketDetail ticketId="tkt-100" onBack={vi.fn()} />);
@@ -369,16 +506,26 @@ describe("Ticket Workflow & Status Transitions UI Component Tests (TicketWorkflo
       expect(screen.getByTestId("ticket-workflow-controls")).toBeInTheDocument();
       expect(screen.getByTestId("staff-workflow-card")).toBeInTheDocument();
 
-      // Trigger transition
-      fireEvent.click(screen.getByTestId("transition-to-in-progress"));
+      // Click resolve shortcut
+      fireEvent.click(screen.getByTestId("transition-to-resolved"));
+
+      // Fill in resolution summary
+      const summaryInput = await screen.findByTestId("resolution-summary-input");
+      fireEvent.change(summaryInput, {
+        target: { value: "Replaced failed optical transceiver on IDF switch port." },
+      });
+
+      // Submit resolution
+      fireEvent.click(screen.getByTestId("confirm-resolve-btn"));
 
       await waitFor(() => {
-        expect(api.updateTicketStatus).toHaveBeenCalledWith(
-          "tkt-100",
-          "IN_PROGRESS",
-          undefined,
-          "2026-10-30T00:10:00.000Z",
-          undefined
+        expect(api.updateTicketStatus).toHaveBeenCalled();
+      });
+
+      // Verify that ticket.resolutionSummary is displayed on the screen (Fix 4)
+      await waitFor(() => {
+        expect(screen.getByTestId("detail-resolution-summary")).toHaveValue(
+          "Replaced failed optical transceiver on IDF switch port."
         );
       });
     });
