@@ -364,6 +364,7 @@ actionsRouter.patch("/:actionId", async (req: Request, res: Response) => {
       followUpRequired,
       followUpNote,
       attachmentNotes,
+      actionDateTime,
       expectedUpdatedAt,
     } = req.body || {};
 
@@ -388,6 +389,27 @@ actionsRouter.patch("/:actionId", async (req: Request, res: Response) => {
     }
 
     const validationDetails: Array<{ field: string; issue: string }> = [];
+
+    // Validate actionDateTime if provided: must be a valid ISO date string and not in the future
+    let parsedActionDateTime: Date | undefined = undefined;
+    if (actionDateTime !== undefined && actionDateTime !== null) {
+      if (typeof actionDateTime !== "string" || !actionDateTime.trim() || isNaN(new Date(actionDateTime).getTime())) {
+        validationDetails.push({
+          field: "actionDateTime",
+          issue: "Action date/time must be a valid ISO date string.",
+        });
+      } else {
+        const dt = new Date(actionDateTime);
+        if (dt.getTime() > Date.now() + 5 * 60 * 1000) {
+          validationDetails.push({
+            field: "actionDateTime",
+            issue: "Action date/time cannot be in the future.",
+          });
+        } else {
+          parsedActionDateTime = dt;
+        }
+      }
+    }
 
     // Reject non-boolean followUpRequired
     if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
@@ -481,6 +503,7 @@ actionsRouter.patch("/:actionId", async (req: Request, res: Response) => {
         updatedAt: new Date(expectedUpdatedAt),
       },
       data: {
+        actionDateTime: parsedActionDateTime,
         description: description !== undefined ? description.trim() : undefined,
         result: result !== undefined ? result.trim() : undefined,
         followUpRequired: nextFollowUpRequired,

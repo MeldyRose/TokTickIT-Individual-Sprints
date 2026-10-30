@@ -186,6 +186,17 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
     }
   };
 
+  const handleRefreshTicket = async () => {
+    if (!ticketId) return;
+    try {
+      const ticketData = await fetchTicketDetail(ticketId);
+      setTicket(ticketData);
+      setAttachments(ticketData.attachments || []);
+    } catch {
+      // ignore
+    }
+  };
+
   if (loading) {
     return (
       <div className="container py-5 text-center" data-testid="detail-loading">
@@ -615,7 +626,12 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
       </div>
 
       <div className="mt-4">
-        <ActionsTakenSection ticketId={ticketId} ticketIsUnassigned={!ticket.ownerId} />
+        <ActionsTakenSection
+          ticketId={ticketId}
+          ticketIsUnassigned={!ticket.ownerId}
+          ticketStatus={ticket.currentStatus}
+          onActionAddedOrUpdated={handleRefreshTicket}
+        />
       </div>
 
       {user?.role !== "REQUESTER" && (

@@ -260,7 +260,7 @@ describe("Actions Taken Component & Modal Tests (ActionsTaken.test.tsx)", () => 
     expect(screen.queryByText(/✏️ Edit/i)).toBeNull();
   });
 
-  it("renders create and edit controls for IT_STAFF and ADMINISTRATOR roles", async () => {
+  it("renders create and edit controls for IT_STAFF and ADMINISTRATOR roles, showing actionToEdit.performedBy in edit mode", async () => {
     mockAuth(staffUser);
 
     render(<ActionsTakenSection ticketId="tkt-100" />);
@@ -273,11 +273,12 @@ describe("Actions Taken Component & Modal Tests (ActionsTaken.test.tsx)", () => 
     expect(screen.getByTestId("edit-action-btn-act-001")).toBeInTheDocument();
     expect(screen.getByTestId("edit-action-btn-act-002")).toBeInTheDocument();
 
-    // Clicking + Log Action Taken opens modal
+    // Clicking + Log Action Taken opens modal with current user as performer and max on date picker
     fireEvent.click(logBtn);
     expect(await screen.findByTestId("action-taken-modal")).toBeInTheDocument();
     expect(screen.getByTestId("modal-title")).toHaveTextContent(/Log Action Taken/i);
     expect(screen.getByTestId("performer-name")).toHaveTextContent("Alex Thompson");
+    expect(screen.getByTestId("action-datetime-input")).toHaveAttribute("max");
 
     // Close modal
     fireEvent.click(screen.getByTestId("modal-close-btn"));
@@ -285,12 +286,15 @@ describe("Actions Taken Component & Modal Tests (ActionsTaken.test.tsx)", () => 
       expect(screen.queryByTestId("action-taken-modal")).toBeNull();
     });
 
-    // Clicking Edit opens modal prefilled
-    fireEvent.click(screen.getByTestId("edit-action-btn-act-001"));
+    // Clicking Edit on act-002 (performed by Lisa Martinez, while current user is Alex Thompson)
+    // Must display Lisa Martinez as performedBy!
+    fireEvent.click(screen.getByTestId("edit-action-btn-act-002"));
     expect(await screen.findByTestId("action-taken-modal")).toBeInTheDocument();
     expect(screen.getByTestId("modal-title")).toHaveTextContent(/Edit Action Taken/i);
+    expect(screen.getByTestId("performer-name")).toHaveTextContent("Lisa Martinez");
+    expect(screen.getByTestId("action-datetime-input")).toHaveAttribute("max");
     expect(screen.getByTestId("action-description-input")).toHaveValue(
-      "Connected console cable to Switch-SW02 and inspected interface Gi0/24."
+      "Replaced faulty SFP module with new 10G-SR transceiver and re-seated patch cord."
     );
   });
 
@@ -357,7 +361,7 @@ describe("Actions Taken Component & Modal Tests (ActionsTaken.test.tsx)", () => 
     expect(screen.getByTestId("actions-count-badge")).toHaveTextContent("3");
   });
 
-  it("supports editing an existing action taken with optimistic concurrency control and error alert on 409 Conflict", async () => {
+  it("supports editing an existing action taken including date with OCC and error alert on 409 Conflict", async () => {
     mockAuth(staffUser);
 
     const conflictErr = new Error("Stale update conflict");
@@ -376,7 +380,10 @@ describe("Actions Taken Component & Modal Tests (ActionsTaken.test.tsx)", () => 
       />
     );
 
-    // Modify description
+    // Modify description and date
+    fireEvent.change(screen.getByTestId("action-datetime-input"), {
+      target: { value: "2026-10-28T09:30" },
+    });
     fireEvent.change(screen.getByTestId("action-description-input"), {
       target: { value: "Updated description for optical transceiver testing." },
     });
@@ -390,6 +397,7 @@ describe("Actions Taken Component & Modal Tests (ActionsTaken.test.tsx)", () => 
         "act-001",
         expect.objectContaining({
           expectedUpdatedAt: "2026-10-28T09:20:00.000Z",
+          actionDateTime: expect.any(String),
         })
       );
     });
@@ -398,6 +406,22 @@ describe("Actions Taken Component & Modal Tests (ActionsTaken.test.tsx)", () => 
     const errorAlert = await screen.findByTestId("modal-error-alert");
     expect(errorAlert).toBeInTheDocument();
     expect(errorAlert).toHaveTextContent(/modified by another user/i);
+  });
+
+  it("hides Log Action Taken and Edit controls on CLOSED and CANCELLED tickets", async () => {
+    mockAuth(staffUser);
+
+    const { rerender } = render(<ActionsTakenSection ticketId="tkt-100" ticketStatus="CLOSED" />);
+
+    expect(await screen.findByTestId("actions-section-title")).toBeInTheDocument();
+    expect(screen.queryByTestId("log-action-btn")).toBeNull();
+    expect(screen.queryByTestId("edit-action-btn-act-001")).toBeNull();
+    expect(screen.queryByTestId("mobile-edit-action-btn-act-001")).toBeNull();
+
+    rerender(<ActionsTakenSection ticketId="tkt-100" ticketStatus="CANCELLED" />);
+    expect(screen.queryByTestId("log-action-btn")).toBeNull();
+    expect(screen.queryByTestId("edit-action-btn-act-001")).toBeNull();
+    expect(screen.queryByTestId("mobile-edit-action-btn-act-001")).toBeNull();
   });
 
   it("renders responsive desktop table container (>=992px) and mobile stacked card container (<768px)", async () => {
@@ -430,5 +454,29 @@ describe("Actions Taken Component & Modal Tests (ActionsTaken.test.tsx)", () => 
     // Confirm write buttons are completely absent
     expect(screen.queryByTestId("log-action-btn")).toBeNull();
     expect(screen.queryByTestId("edit-action-btn-act-001")).toBeNull();
+  });
+
+  it("triggers onActionAddedOrUpdated callback when action is logged", async () => {
+    mockAuth(staffUser);
+    const refreshSpy = vi.fn();
+
+    vi.spyOn(api, "createTicketAction").mockResolvedValue({ action: mockActions[0] });
+
+    render(<ActionsTakenSection ticketId="tkt-100" onActionAddedOrUpdated={refreshSpy} />);
+
+    fireEvent.click(await screen.findByTestId("log-action-btn"));
+
+    fireEvent.change(screen.getByTestId("action-description-input"), {
+      target: { value: "Valid description for testing refresh callback." },
+    });
+    fireEvent.change(screen.getByTestId("action-result-input"), {
+      target: { value: "Valid test result." },
+    });
+
+    fireEvent.click(screen.getByTestId("modal-submit-btn"));
+
+    await waitFor(() => {
+      expect(refreshSpy).toHaveBeenCalled();
+    });
   });
 });

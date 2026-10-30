@@ -83,11 +83,26 @@ export const ActionTakenModal: React.FC<ActionTakenModalProps> = ({
 
   if (!isOpen) return null;
 
+  const performer = isEditing && actionToEdit?.performedBy ? actionToEdit.performedBy : user;
+  const isPerformerAdmin = performer?.role === "ADMINISTRATOR";
+  const performerRoleLabel = isPerformerAdmin
+    ? "Administrator"
+    : performer?.role === "REQUESTER"
+    ? "Requester"
+    : "IT Staff";
+
   const validate = (): boolean => {
     const errors: Record<string, string> = {};
 
     if (!actionDateTime) {
       errors.actionDateTime = "Action date and time is required.";
+    } else {
+      const dt = new Date(actionDateTime);
+      if (isNaN(dt.getTime())) {
+        errors.actionDateTime = "Action date and time must be a valid date.";
+      } else if (dt.getTime() > Date.now() + 5 * 60 * 1000) {
+        errors.actionDateTime = "Action date and time cannot be in the future.";
+      }
     }
 
     if (!description.trim()) {
@@ -217,15 +232,15 @@ export const ActionTakenModal: React.FC<ActionTakenModalProps> = ({
                 <div>
                   <span className="small text-muted d-block">Performed By</span>
                   <span className="fw-semibold text-dark" data-testid="performer-name">
-                    {user?.name || "Current User"}
+                    {performer?.name || "Current User"}
                   </span>
                 </div>
                 <span
                   className="badge px-2 py-1 rounded-pill"
-                  style={{ backgroundColor: "#006B3C", color: "#FFFFFF" }}
+                  style={{ backgroundColor: isPerformerAdmin ? "#7B1FA2" : "#006B3C", color: "#FFFFFF" }}
                   data-testid="performer-role-badge"
                 >
-                  {user?.role === "ADMINISTRATOR" ? "Administrator" : "IT Staff"}
+                  {performerRoleLabel}
                 </span>
               </div>
 
@@ -238,6 +253,7 @@ export const ActionTakenModal: React.FC<ActionTakenModalProps> = ({
                   type="datetime-local"
                   id="actionDateTime"
                   name="actionDateTime"
+                  max={getNowLocalDatetime()}
                   className={`form-control ${fieldErrors.actionDateTime ? "is-invalid" : ""}`}
                   value={actionDateTime}
                   onChange={(e) => {

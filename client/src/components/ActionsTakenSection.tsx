@@ -6,12 +6,14 @@ import { ActionTakenModal } from "./ActionTakenModal";
 interface ActionsTakenSectionProps {
   ticketId: string;
   ticketIsUnassigned?: boolean;
+  ticketStatus?: string;
   onActionAddedOrUpdated?: () => void;
 }
 
 export const ActionsTakenSection: React.FC<ActionsTakenSectionProps> = ({
   ticketId,
   ticketIsUnassigned = false,
+  ticketStatus,
   onActionAddedOrUpdated,
 }) => {
   const { user } = useAuth();
@@ -23,7 +25,9 @@ export const ActionsTakenSection: React.FC<ActionsTakenSectionProps> = ({
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [actionToEdit, setActionToEdit] = useState<ActionTaken | null>(null);
 
-  const canManageActions = user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR";
+  const isTerminalStatus = ticketStatus === "CLOSED" || ticketStatus === "CANCELLED";
+  const canManageActions =
+    (user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR") && !isTerminalStatus;
 
   const loadActions = useCallback(async () => {
     if (!ticketId) return;
@@ -147,7 +151,9 @@ export const ActionsTakenSection: React.FC<ActionsTakenSectionProps> = ({
             <div className="mb-2" style={{ fontSize: "2rem" }}>📋</div>
             <div className="fw-semibold">No Actions Taken Recorded</div>
             <div className="small">
-              {canManageActions
+              {isTerminalStatus
+                ? "This ticket is closed or cancelled. No actions can be logged."
+                : canManageActions
                 ? "Document technical interventions or troubleshooting steps taken on this ticket."
                 : "No actions have been logged by the IT support staff yet."}
             </div>
@@ -251,7 +257,7 @@ export const ActionsTakenSection: React.FC<ActionsTakenSectionProps> = ({
                         )}
                       </td>
 
-                      {/* Action edit control (Staff/Admin only) */}
+                      {/* Action edit control (Staff/Admin only on non-terminal tickets) */}
                       {canManageActions && (
                         <td className="align-top text-end">
                           <button
