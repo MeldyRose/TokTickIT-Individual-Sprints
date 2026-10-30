@@ -16,6 +16,7 @@ import { StatusBadge, PriorityBadge } from "../components/Badge";
 import { InternalNotesSection } from "../components/InternalNotesSection";
 import { TicketWorkflowControls } from "../components/TicketWorkflowControls";
 import { ConcurrencyConflictBanner } from "../components/ConcurrencyConflictBanner";
+import { ActionsTakenSection } from "../components/ActionsTakenSection";
 
 interface RequesterTicketDetailProps {
   ticketId: string;
@@ -240,6 +241,17 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
       }
     } finally {
       setResolveSubmitting(false);
+    }
+  };
+
+  const handleRefreshTicket = async () => {
+    if (!ticketId) return;
+    try {
+      const ticketData = await fetchTicketDetail(ticketId);
+      setTicket(ticketData);
+      setAttachments(ticketData.attachments || []);
+    } catch {
+      // ignore
     }
   };
 
@@ -690,6 +702,15 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
             </table>
           </div>
         )}
+      </div>
+
+      <div className="mt-4">
+        <ActionsTakenSection
+          ticketId={ticketId}
+          ticketIsUnassigned={!ticket.ownerId}
+          ticketStatus={ticket.currentStatus}
+          onActionAddedOrUpdated={handleRefreshTicket}
+        />
       </div>
 
       {user?.role !== "REQUESTER" && (

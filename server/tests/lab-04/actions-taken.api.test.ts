@@ -844,6 +844,35 @@ describe("Lab 4: Actions Taken Backend REST API & Role-Based Authorization (acti
       expect(res.body.action.description).toBe("Successful edit with fresh expectedUpdatedAt timestamp.");
     });
 
+    it("updates actionDateTime on PATCH and rejects future actionDateTime", async () => {
+      const freshAction = await prisma.actionTaken.findUnique({ where: { id: targetAction.id } });
+      const currentTimestamp = freshAction!.updatedAt.toISOString();
+
+      // 1. Reject future date
+      const futureDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const resFuture = await request(app)
+        .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          actionDateTime: futureDate,
+          expectedUpdatedAt: currentTimestamp,
+        });
+      expect(resFuture.status).toBe(400);
+      expect(resFuture.body.error.message).toMatch(/cannot be in the future/i);
+
+      // 2. Accept valid past date
+      const newActionDate = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const resValid = await request(app)
+        .patch(`/api/tickets/${testTicket.id}/actions/${targetAction.id}`)
+        .set("Cookie", [`toktickit_session=${staffToken}`])
+        .send({
+          actionDateTime: newActionDate,
+          expectedUpdatedAt: currentTimestamp,
+        });
+      expect(resValid.status).toBe(200);
+      expect(new Date(resValid.body.action.actionDateTime).toISOString()).toBe(new Date(newActionDate).toISOString());
+    });
+
     it("returns 404 Not Found if action does not exist or does not belong to ticket", async () => {
       const res = await request(app)
         .patch(`/api/tickets/${testTicket.id}/actions/cuid_fake_action_9999`)
