@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { checkSystem, Category } from "./api";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Header } from "./components/Header";
@@ -50,6 +50,12 @@ function getTabFromUrl(): string | null {
 
 function MainContent() {
   const { user, isLoading } = useAuth();
+  const userRef = useRef(user);
+  const prevUserRef = useRef<{ id?: string; role?: string }>({});
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
   const [activeTab, setActiveTab] = useState<string>(() => {
     const urlTab = getTabFromUrl();
     return urlTab || "my-tickets";
@@ -63,13 +69,14 @@ function MainContent() {
   useEffect(() => {
     const onLocationChange = () => {
       const urlTab = getTabFromUrl();
+      const currentUser = userRef.current;
       if (urlTab) {
         if (
           (urlTab === "my-tickets" || urlTab === "requester-dashboard") &&
-          (user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR")
+          (currentUser?.role === "IT_STAFF" || currentUser?.role === "ADMINISTRATOR")
         ) {
           setActiveTab("staff-dashboard");
-        } else if (urlTab === "staff-dashboard" && user?.role === "REQUESTER") {
+        } else if (urlTab === "staff-dashboard" && currentUser?.role === "REQUESTER") {
           setActiveTab("requester-dashboard");
         } else {
           setActiveTab(urlTab);
@@ -89,6 +96,14 @@ function MainContent() {
 
   useEffect(() => {
     if (user) {
+      const isNewLoginOrRoleChange =
+        prevUserRef.current.id !== user.id || prevUserRef.current.role !== user.role;
+      prevUserRef.current = { id: user.id, role: user.role };
+
+      if (!isNewLoginOrRoleChange) {
+        return;
+      }
+
       const isStaffOrAdmin = user.role === "IT_STAFF" || user.role === "ADMINISTRATOR";
       let urlTab = getTabFromUrl();
 
@@ -119,6 +134,8 @@ function MainContent() {
           setActiveTab(urlTab);
         }
       }
+    } else {
+      prevUserRef.current = {};
     }
   }, [user]);
 

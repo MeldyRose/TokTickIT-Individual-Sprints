@@ -560,5 +560,83 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
 
       window.history.pushState(null, "", "/");
     });
+
+    it("handles browser back (popstate) for staff on /requester/dashboard using userRef without 403", async () => {
+      window.history.pushState(null, "", "/staff/dashboard");
+      const staffUser: api.AuthUser = {
+        id: "u_staff_lisa",
+        name: "Lisa Martinez",
+        email: "lisa.martinez@toktickit.com",
+        role: "IT_STAFF",
+        mustChangePassword: false,
+      };
+      vi.spyOn(AuthContextModule, "useAuth").mockReturnValue({
+        user: staffUser,
+        isAuthenticated: true,
+        isLoading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        changePassword: vi.fn(),
+        refreshUser: vi.fn(),
+      });
+      vi.spyOn(api, "fetchStaffDashboard").mockResolvedValue({
+        metrics: {
+          totalOpen: 10,
+          unassigned: 2,
+          ownedByMe: 3,
+          myAssigned: 3,
+          waitingForRequester: 1,
+          urgentOrHigh: 2,
+          resolvedToday: 4,
+          avgResolutionMinutes: 120,
+          avgResolutionFormatted: "2h",
+          recentlyUpdated: 5,
+        },
+        breakdown: { byStatus: [], byPriority: [] },
+        recentTickets: [],
+        calculatedAt: "2026-10-31T00:00:00.000Z",
+      });
+
+      render(<App />);
+      expect(await screen.findByTestId("staff-dashboard")).toBeInTheDocument();
+
+      // Simulate browser back to requester dashboard
+      window.history.pushState(null, "", "/requester/dashboard");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+
+      // Staff should remain on staff dashboard
+      expect(await screen.findByTestId("staff-dashboard")).toBeInTheDocument();
+      expect(screen.queryByTestId("requester-dashboard")).not.toBeInTheDocument();
+
+      window.history.pushState(null, "", "/");
+    });
+
+    it("does not jump away from active view when user state updates without role/id change", async () => {
+      let authUser: api.AuthUser = { ...requesterUser };
+      const authSpy = vi.spyOn(AuthContextModule, "useAuth");
+      authSpy.mockImplementation(() => ({
+        user: authUser,
+        isAuthenticated: true,
+        isLoading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        changePassword: vi.fn(),
+        refreshUser: vi.fn(),
+      }));
+
+      const { rerender } = render(<App />);
+
+      // Navigate to requester dashboard
+      const dashboardNavBtn = await screen.findByTestId("nav-requester-dashboard");
+      fireEvent.click(dashboardNavBtn);
+      expect(await screen.findByTestId("requester-dashboard")).toBeInTheDocument();
+
+      // User state updates (e.g. voluntary password change updating mustChangePassword)
+      authUser = { ...authUser, mustChangePassword: false };
+      rerender(<App />);
+
+      // Should remain on requester dashboard, not reset to default tab
+      expect(screen.getByTestId("requester-dashboard")).toBeInTheDocument();
+    });
   });
 });
