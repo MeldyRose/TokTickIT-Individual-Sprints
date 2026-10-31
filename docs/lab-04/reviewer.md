@@ -86,9 +86,9 @@
 ### [PR #69](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/69) — `feature/28-dashboard-api`
 - **Initial Verdict:** `Changes Requested`
 - **Reviewer Comment (@GGital):** Flagged edge cases in dashboard calculation logic:
-  1. Align `recentlyResolved` query filtering with BR-20 specifications (tickets resolved within the last 30 days).
+  1. Align `recentlyResolved` query filtering with BR-20 specifications (tickets resolved within the last 7 days).
   2. Flaky shared-DB tests in concurrent test runs due to unisolated test database mutations.
-- **My Response (@MeldyRose):** Aligned `recentlyResolved` window with BR-20 criteria in `server/src/utils/dashboardUtils.ts` and improved test database isolation and teardown in `server/tests/lab-04/staff-dashboard.api.test.ts`. Confirmed sub-200ms query performance.
+- **My Response (@MeldyRose):** Aligned `recentlyResolved` window with BR-20 criteria (7-day window) in `server/src/utils/dashboardUtils.ts` and improved test database isolation and teardown in `server/tests/lab-04/staff-dashboard.api.test.ts`. Confirmed sub-200ms query performance.
 - **Final Verdict:** `Approved`
 
 ### [PR #70](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/70) — `feature/29-staff-dashboard-ui`

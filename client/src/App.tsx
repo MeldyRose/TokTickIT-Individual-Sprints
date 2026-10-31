@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import "./index.css";
 import { checkSystem, Category } from "./api";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Header } from "./components/Header";
