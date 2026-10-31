@@ -337,15 +337,14 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
                 <div
                   role="button"
                   tabIndex={0}
-                  className="card h-100 shadow-sm transition-elevation"
+                  className="card h-100 shadow-sm transition-elevation dashboard-metric-card"
                   style={{
                     backgroundColor: "#FFFFFF",
                     border: "1px solid #D8E0DC",
                     borderLeft: `5px solid ${card.accentColor}`,
                     borderRadius: 8,
                     cursor: "pointer",
-                    outline: "none",
-                    padding: "16px 20px",
+                                        padding: "16px 20px",
                   }}
                   onClick={() => handleCardClick(card.statusFilter, card.resolvedRange)}
                   onKeyDown={(e) => {

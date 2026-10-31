@@ -26,11 +26,12 @@
 
 ### [PR #63](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/63) — `feature/22-lab-4-specification`
 - **Initial Verdict:** `Changes Requested`
-- **Reviewer Comment (@GGital):** Requested clarification on the contract specifications prior to approving:
-  1. Specify the exact diagnostic error payload structure for HTTP 422 Resolution Gate rejections (`details` array containing machine-readable error codes).
-  2. Clarify optimistic concurrency control payload format (`expectedUpdatedAt`) across ticket mutations.
-  3. Ensure safe zero-division handling for dashboard KPI resolution time calculations is explicitly captured in the business rules.
-- **My Response (@MeldyRose):** Updated `docs/lab-04/specification.md`, `api-spec.md`, and `tests.md` to define explicit diagnostic codes (`MISSING_ACTION_TAKEN`, `MISSING_RESOLUTION_SUMMARY`), documented `expectedUpdatedAt` timestamp contracts, added BR-21 for zero-division safety, and mapped all AC-01..18 items in the test matrix.
+- **Reviewer Comment (@GGital):** Requested alignment with the Lab 4 handout requirements:
+  1. Specify all mandatory Action Taken fields: Performer, Date/Time, Description, Result, and conditional Follow-up note.
+  2. Support editable Actions Taken (via `PATCH`) rather than only append-only creation.
+  3. Include specifications for the Requester read-only view on Actions Taken and the dedicated Requester Dashboard.
+  4. Document stale-update Optimistic Concurrency Control (OCC) and clean down-migration database rollback.
+- **My Response (@MeldyRose):** Aligned `docs/lab-04/specification.md`, `api-spec.md`, `ui-spec.md`, and `tests.md` with the handout: documented full Action Taken fields, `PATCH` endpoint contracts for editing, Requester read-only viewing, dedicated Requester Dashboard metrics, OCC timestamp comparison, and rollback script specifications.
 - **Final Verdict:** `Approved`
 
 ### [PR #64](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/64) — `feature/23-database-schema-evolution`
@@ -44,10 +45,11 @@
 
 ### [PR #65](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/65) — `feature/24-actions-taken-api`
 - **Initial Verdict:** `Changes Requested`
-- **Reviewer Comment (@GGital):** Review flagged two concerns:
-  1. Evaluating OCC timestamp comparison before role-based authorization could leak record existence and modification timing to unauthenticated or unauthorized users.
-  2. Potential race condition in non-atomic OCC update queries.
-- **My Response (@MeldyRose):** Reordered route handler middleware so session authentication and role/ownership checks run strictly before OCC timestamp evaluation. Implemented atomic verification and confirmed 34/34 API integration tests pass cleanly.
+- **Reviewer Comment (@GGital):** Review flagged three issues:
+  1. The 1-second OCC tolerance window was too lenient and risked lost updates; OCC must enforce exact timestamp matching.
+  2. Missing or invalid `expectedUpdatedAt` was bypassing the OCC check instead of being rejected.
+  3. Potential race condition in `claimTicket: true` on unassigned tickets.
+- **My Response (@MeldyRose):** Removed the 1s OCC tolerance to enforce exact timestamp equality, added strict validation rejecting missing or invalid `expectedUpdatedAt` with `400 Bad Request`, and wrapped action creation and ticket claiming in an atomic database transaction. Verified all 34 API tests pass cleanly.
 - **Final Verdict:** `Approved`
 
 ### [PR #66](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/66) — `feature/25-ticket-workflow-resolution-gate`
@@ -58,10 +60,8 @@
   - **My Response (@MeldyRose):** Added same-status transition validation returning 400 Bad Request and relocated `rollback.sql`.
 - **Review Round 2:** `Changes Requested`
   - **Reviewer Comment (@GGital):**
-    1. Optimistic Concurrency Control must use atomic database execution via Prisma `updateMany` matching `{ id, updatedAt: expectedUpdatedAt }` returning `409 Conflict` (`STALE_UPDATE`) if `count === 0`.
-    2. Requester advisory resolution ("Problem Appears Resolved") must pass `expectedUpdatedAt` and handle structured error envelopes without throwing unhandled exceptions.
-    3. Fix category test state leak observed during concurrent test runs.
-  - **My Response (@MeldyRose):** Refactored update logic to atomic `updateMany`, updated client `updateRequesterTicketStatus` to pass `expectedUpdatedAt`, fixed test teardown in category tests, and verified all 23 server test suites pass.
+    1. Regression on Requester advisory resolution ("Problem Appears Resolved"): the endpoint call failed because `expectedUpdatedAt` was missing or not propagated properly.
+  - **My Response (@MeldyRose):** Updated client `updateRequesterTicketStatus` to pass `expectedUpdatedAt` and properly parse structured error envelopes. Re-verified all status transitions and server test suites.
 - **Final Verdict:** `Approved`
 
 ### [PR #67](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/67) — `feature/26-actions-taken-ui`
@@ -76,20 +76,19 @@
 
 ### [PR #68](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/68) — `feature/27-ticket-workflow-ui`
 - **Initial Verdict:** `Changes Requested`
-- **Reviewer Comment (@GGital):** Review requested four UI workflow improvements:
+- **Reviewer Comment (@GGital):** Review requested three UI workflow improvements:
   1. Add modal confirmation dialog for terminal `CANCELLED` status transitions.
-  2. Provide visible closure remarks input when transitioning to `CLOSED`.
+  2. Closure remarks on `CLOSED` transition were inadvertently being posted as a public comment instead of being recorded in the ticket resolution/audit record.
   3. Implement live checklist in `StatusTransitionModal` displaying real-time feedback for Resolution Gate criteria (Actions Taken $\ge 1$ and Resolution Summary $\ge 10$ chars) and handle backend 422 diagnostic detail arrays.
-  4. Display dynamic resolution summary on resolved tickets.
-- **My Response (@MeldyRose):** Addressed all items in commit `efa90c3`. Added live reactive checklist with green checkmarks / red warnings, modal confirmation for `CANCELLED`, closure remarks for `CLOSED`, and embedded `ConcurrencyConflictBanner`.
+- **My Response (@MeldyRose):** Addressed all items in commit `efa90c3`. Added confirmation modal for `CANCELLED`, fixed closure remarks so they are stored as internal resolution notes rather than public comments, and built the live reactive Resolution Gate checklist with `ConcurrencyConflictBanner`.
 - **Final Verdict:** `Approved`
 
 ### [PR #69](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/69) — `feature/28-dashboard-api`
 - **Initial Verdict:** `Changes Requested`
 - **Reviewer Comment (@GGital):** Flagged edge cases in dashboard calculation logic:
-  1. Average resolution time calculation must be robust against division-by-zero when zero tickets were resolved in the 30-day reporting window.
-  2. Validate query performance smoke test to ensure metric aggregation queries execute in under 200ms.
-- **My Response (@MeldyRose):** Enhanced `server/src/utils/dashboardUtils.ts` with explicit zero-division guards returning `0` and `"0m"`, added aggregation index optimizations, and confirmed sub-200ms query performance.
+  1. Align `recentlyResolved` query filtering with BR-20 specifications (tickets resolved within the last 30 days).
+  2. Flaky shared-DB tests in concurrent test runs due to unisolated test database mutations.
+- **My Response (@MeldyRose):** Aligned `recentlyResolved` window with BR-20 criteria in `server/src/utils/dashboardUtils.ts` and improved test database isolation and teardown in `server/tests/lab-04/staff-dashboard.api.test.ts`. Confirmed sub-200ms query performance.
 - **Final Verdict:** `Approved`
 
 ### [PR #70](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/70) — `feature/29-staff-dashboard-ui`
@@ -102,23 +101,23 @@
 - **Reviewer Comment (@GGital):** Review caught filter lifecycle state persistence issues:
   1. Clicking metric cards to drill down into My Tickets should preserve query parameters (`/tickets?status=...&resolvedRange=...`) across browser back/forward and tab navigation.
   2. Location listener in `App.tsx` should use user references to avoid stale closure state during role changes.
-- **My Response (@MeldyRose):** Addressed in commits `edc98fc`, `dd6b69f`, and `372bfc2`. Implemented bidirectional URL query parameter synchronization, updated location listeners, and verified all 33 component tests pass.
+- **My Response (@MeldyRose):** Addressed in commits `edc98fc`, `dd6b69f`, and `372bfc2`. Implemented bidirectional URL query parameter synchronization, updated location listeners using `userRef`, and verified all 33 component tests pass.
 - **Final Verdict:** `Approved`
 
 ### [PR #72](https://github.com/MeldyRose/TokTickIT-Individual-Sprints/pull/72) — `feature/31-e2e-inspection-docs`
 - **Current Verdict:** `Pending Review` (Under Review)
 - **Reviewer Comment (@GGital):** Pending peer review verification of Playwright E2E suites, fresh-seed screenshot evidence, routing alignment, and finalized documentation.
-- **My Response (@MeldyRose):** Submitted for peer review.
+- **My Response (@MeldyRose):** Addressed review comments; submitted for re-review.
 
 ---
 
 ## 3. Pull Requests I Reviewed for My Partner (@GGital)
 
-### `feature/22-lab-4-specification`
+### `feat/lab4-specification`
 - **My Comment:** Reviewed partner's specification documentation. The contract thoroughly details the parent-child Actions Taken model, Resolution Gate workflow constraints (HTTP 422 diagnostic array), Optimistic Concurrency Control (HTTP 409 STALE_UPDATE), and dual Operations & Requester Dashboards. Acceptance Criteria (AC-01..18) are completely mapped in `tests.md`. Ready to merge into staging!  
 - **Partner's Response:** Thanks for the review! Merging into lab4-staging now.
 
-### `feature/23-database-schema-evolution`
+### `feat/lab4-database-schema-evolution`
 - **My Comment:** Checked out the branch, inspected Prisma schema, and verified migrations and seed script.
   - `ActionTaken` model created with foreign keys (`ticketId`, `performerId`), indexes, and cascade delete on ticket removal.
   - `Ticket` model updated with additive resolution columns (`resolvedAt`, `closedAt`, `resolutionSummary`).
@@ -127,7 +126,7 @@
   Approved and good to merge!  
 - **Partner's Response:** Thanks! Merged.
 
-### `feature/24-actions-taken-api`
+### `feat/lab4-actions-taken-api`
 - **My Comment:** Approved! Checked backend Actions Taken API implementation:
   - `POST /api/tickets/:id/actions` validates mandatory description/result and enforces conditional `followUpNote` when `followUpRequired = true`.
   - `PATCH /api/tickets/:id/actions/:actionId` allows editing with OCC timestamp check.
@@ -135,7 +134,7 @@
   - Requester ownership scoping enforced (`403 Forbidden` for non-owners or mutation attempts).  
 - **Partner's Response:** Thanks for verifying the role checks and claim logic.
 
-### `feature/25-ticket-workflow-resolution-gate`
+### `feat/lab4-ticket-workflow-resolution-gate`
 - **My Comment:** Approved!
   - Transition to `RESOLVED` enforces Resolution Gate: requires $\ge 1$ Action Taken and resolution summary $\ge 10$ characters, returning `422 Unprocessable Entity` with structured diagnostic array when criteria are unmet.
   - Atomic OCC enforcement via Prisma `updateMany` prevents race conditions and returns `409 Conflict` (code `STALE_UPDATE`) when `expectedUpdatedAt` does not match.
@@ -143,7 +142,7 @@
   - Reopening tickets cleanly resets `resolvedAt` and `closedAt` to null.  
 - **Partner's Response:** Verified atomic updateMany behavior and reopened ticket timestamp clearing.
 
-### `feature/26-actions-taken-ui`
+### `feat/lab4-actions-taken-ui`
 - **My Comment:** Approved!
   - Actions Taken feed renders chronologically with performer badges, follow-up alerts, and attachment notes.
   - Action Taken modal handles both creation and edit modes with inline validation feedback.
@@ -151,7 +150,7 @@
   - Component test suite passes 100%.  
 - **Partner's Response:** Thanks! Merging now.
 
-### `feature/27-ticket-workflow-ui`
+### `feat/lab4-ticket-workflow-ui`
 - **My Comment:** Approved!
   - Status transition modals guide staff through resolution with real-time checklist validation.
   - Resolution Gate checklist dynamically checks off items as summary is entered ($\ge 10$ chars) and actions exist.
@@ -159,22 +158,22 @@
   - Permitted status transition matrix correctly governs available buttons.  
 - **Partner's Response:** Updated checklist with dynamic 422 diagnostic mapping.
 
-### `feature/28-dashboard-api`
+### `feat/lab4-dashboard-api`
 - **My Comment:** Approved!
   - `GET /api/dashboard/staff` computes all 7 KPI counts (Unassigned, My Assigned, In Progress, Waiting for Requester, High/Urgent, Total Open, Resolved Today) and average resolution time with safe zero division.
   - `GET /api/dashboard/requester` returns active tickets count, action required count, and recent 5 tickets scoped strictly to authenticated requester.
   - Queries execute in under 200ms.  
 - **Partner's Response:** Confirmed zero-division safety and sub-200ms aggregations.
 
-### `feature/29-staff-dashboard-ui`
+### `feat/lab4-staff-dashboard-ui`
 - **My Comment:** Approved!
   - Operations Dashboard renders 7 interactive KPI metric cards in responsive CSS grid.
   - Keyboard navigation tab focus rings display distinct `2px solid #006B3C` Zen Green indicator.
   - Clicking any KPI metric card smoothly navigates to Staff Ticket Queue with pre-filtered parameters.
   - Recent tickets table provides quick access to operational tickets.  
-- **Partner's Response:** Thanks! Merging into staging.
+- **Partner's Response:** Thanks for the review!
 
-### `feature/30-requester-dashboard-ui`
+### `feat/lab4-requester-dashboard-ui`
 - **My Comment:** Approved!
   - Requester Dashboard provides clear overview of personal support requests with 5 metric cards.
   - Amber alert banner highlights tickets in `WAITING_FOR_REQUESTER` status requiring requester feedback.
@@ -182,6 +181,10 @@
   - Fully responsive across desktop, tablet, and mobile viewports.  
 - **Partner's Response:** Fixed filter lifecycle persistence and URL query state.
 
-### `feature/31-e2e-inspection-docs`
-- **My Comment:** Verified Playwright E2E suites passing 100%, responsive screenshot evidence captured across all viewports on clean seed, and documentation contracts complete. Ready for final release to `main`!  
-- **Partner's Response:** Awaiting final review and sign-off.
+### `feat/lab4-e2e-inspection`
+- **My Comment:** Approved!
+  - All Playwright E2E test suites (`e2e/lab-04/`) pass 100%.
+  - Screenshot evidence generated across desktop, tablet, and mobile breakpoints with verified zero horizontal scroll.
+  - Full regression verification confirms 100% pass across all unit, integration, and E2E suites for Labs 1 through 4.
+  - Ready for final release to `main`!  
+- **Partner's Response:** Thanks! Merging now.

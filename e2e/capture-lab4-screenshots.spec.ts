@@ -34,8 +34,17 @@ test.describe('Capture Complete Lab 4 Submission Evidence & Visual Inspection', 
 
     await page.screenshot({ path: path.join(STAFF_DIR, '01-staff-dashboard-desktop.png') });
 
-    // Focus ring evidence on metric card
-    await page.getByTestId('metric-card-total-open').focus();
+    // Focus ring evidence on metric card via keyboard Tab navigation & programmatic assertion (A11Y-01)
+    await page.getByTestId('dashboard-view-all-queue-btn').focus();
+    await page.keyboard.press('Tab');
+    const firstCard = page.getByTestId('metric-card-unassigned');
+    await expect(firstCard).toBeFocused();
+    const outline = await firstCard.evaluate((el) => {
+      const s = window.getComputedStyle(el);
+      return { width: s.outlineWidth, style: s.outlineStyle, color: s.outlineColor };
+    });
+    expect(outline.width).toBe('2px');
+    expect(outline.style).toBe('solid');
     await page.screenshot({ path: path.join(STAFF_DIR, '04-staff-dashboard-focus-ring.png') });
 
     // Drilldown navigation evidence
@@ -79,8 +88,10 @@ test.describe('Capture Complete Lab 4 Submission Evidence & Visual Inspection', 
     await page.screenshot({ path: path.join(REQ_DIR, '01-requester-dashboard-desktop.png') });
 
     // 04: Action Required Banner Close-up
-    await expect(page.getByTestId('requester-action-required-banner')).toBeVisible();
-    await page.screenshot({ path: path.join(REQ_DIR, '04-requester-dashboard-action-required-banner.png') });
+    const banner = page.getByTestId('requester-action-required-banner');
+    await expect(banner).toBeVisible();
+    await banner.scrollIntoViewIfNeeded();
+    await banner.screenshot({ path: path.join(REQ_DIR, '04-requester-dashboard-action-required-banner.png') });
 
     // 05: Drill-down to My Tickets for waiting input
     await page.getByTestId('metric-card-waiting-input').click();
@@ -126,6 +137,7 @@ test.describe('Capture Complete Lab 4 Submission Evidence & Visual Inspection', 
 
     // Actions Taken Feed on Tablet Viewport (820x1180)
     await page.setViewportSize({ width: 820, height: 1180 });
+    await page.getByTestId('actions-taken-section').scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
     const tabletOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(tabletOverflow).toBe(false);
@@ -133,6 +145,7 @@ test.describe('Capture Complete Lab 4 Submission Evidence & Visual Inspection', 
 
     // Actions Taken Feed on Mobile Viewport (375x667)
     await page.setViewportSize({ width: 375, height: 667 });
+    await page.getByTestId('actions-taken-section').scrollIntoViewIfNeeded();
     await page.waitForTimeout(400);
     const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(mobileOverflow).toBe(false);
