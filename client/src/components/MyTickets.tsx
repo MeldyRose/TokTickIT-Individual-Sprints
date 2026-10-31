@@ -13,9 +13,10 @@ import { StatusBadge, PriorityBadge } from "./Badge";
 interface MyTicketsProps {
   onCreateTicketClick: () => void;
   onSelectTicket?: (ticketId: string) => void;
+  initialStatusFilter?: string;
 }
 
-export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSelectTicket }) => {
+export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSelectTicket, initialStatusFilter }) => {
   const { user } = useAuth();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -28,7 +29,14 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSel
   // Filters and pagination state
   const [search, setSearch] = useState<string>("");
   const [categoryId, setCategoryId] = useState<string>("");
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState<string>(initialStatusFilter || "");
+
+  useEffect(() => {
+    if (initialStatusFilter !== undefined) {
+      setStatus(initialStatusFilter);
+      setPage(1);
+    }
+  }, [initialStatusFilter]);
   const [relatedSystemId, setRelatedSystemId] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("createdAt");
   const [order, setOrder] = useState<string>("desc");
@@ -151,8 +159,10 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSel
               data-testid="status-filter"
             >
               <option value="">All Statuses</option>
+              <option value="open">Open / Active</option>
               <option value="NEW">New</option>
               <option value="IN_PROGRESS">In Progress</option>
+              <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
               <option value="RESOLVED">Resolved</option>
               <option value="CLOSED">Closed</option>
             </select>
