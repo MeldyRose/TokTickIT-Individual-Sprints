@@ -443,6 +443,13 @@ async function main() {
   const sysMap = Object.fromEntries(dbSystems.map((s) => [s.name, s.id]));
 
   // 4. Tickets
+  const seedTicketIds = TICKETS.map((t) => t.id);
+  await prisma.actionTaken.deleteMany({ where: { ticketId: { notIn: seedTicketIds } } });
+  await prisma.publicComment.deleteMany({ where: { ticketId: { notIn: seedTicketIds } } });
+  await prisma.internalNote.deleteMany({ where: { ticketId: { notIn: seedTicketIds } } });
+  await prisma.attachment.deleteMany({ where: { ticketId: { notIn: seedTicketIds } } });
+  await prisma.ticket.deleteMany({ where: { id: { notIn: seedTicketIds } } });
+
   const ticketMap: Record<string, string> = {};
   for (const t of TICKETS) {
     const mappedCatName = CATEGORIES.find((c) => c.id === t.categoryId)?.name;
@@ -554,6 +561,8 @@ async function main() {
   }
 
   // 7. Actions Taken
+  const seedActionIds = ACTIONS_TAKEN.map((a) => a.id);
+  await prisma.actionTaken.deleteMany({ where: { id: { notIn: seedActionIds } } });
   for (const a of ACTIONS_TAKEN) {
     const tId = ticketMap[a.ticketId] || a.ticketId;
     const pId = userMap[a.performerId] || a.performerId;

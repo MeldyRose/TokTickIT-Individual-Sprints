@@ -8,8 +8,11 @@ test.describe('E2E Administrator User Management Flow (E2E-03, AC-12..16)', () =
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
 
-    // 2. User Management Screen (auto-routed for Administrator)
+    // 2. User Management Screen
     await expect(page.getByTestId('authenticated-user-widget')).toBeVisible();
+    if (await page.getByTestId('nav-user-management').isVisible()) {
+      await page.getByTestId('nav-user-management').click();
+    }
     await expect(page.getByTestId('search-input')).toBeVisible();
 
     // 3. User List Search and Role Filter

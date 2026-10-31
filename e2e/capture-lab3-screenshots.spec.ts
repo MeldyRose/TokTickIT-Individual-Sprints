@@ -90,7 +90,9 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
     await expect(page.getByTestId('authenticated-user-widget')).toBeVisible();
+    await page.getByTestId('nav-ticket-queue').click();
     await expect(page.getByTestId('queue-search-input')).toBeVisible();
+    await page.waitForTimeout(300);
 
     // 6.1 Staff Queue Desktop View
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '10-staff-queue-desktop.png') });
@@ -130,6 +132,8 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
     await expect(page.getByTestId('authenticated-user-widget')).toBeVisible();
+    await page.getByTestId('nav-ticket-queue').click();
+    await expect(page.getByTestId('queue-search-input')).toBeVisible();
 
     // Select ticket tkt-001 from queue
     const viewBtn = page.locator('[data-testid^="view-ticket-"]').first();
@@ -190,6 +194,7 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
     await expect(page.getByTestId('authenticated-user-widget')).toBeVisible();
+    await page.getByTestId('nav-user-management').click();
     await expect(page.getByTestId('user-management-page')).toBeVisible();
 
     // 8.1 Admin User List Screen
@@ -247,6 +252,8 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-email-input').fill('admin@toktickit.com');
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
+    await expect(page.getByTestId('authenticated-user-widget')).toBeVisible();
+    await page.getByTestId('nav-user-management').click();
     await expect(page.getByTestId('user-management-page')).toBeVisible();
 
     // 8.8 Self-Deactivation Disabled Note / Error Banner
@@ -276,6 +283,7 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-email-input').fill('alex.thompson@toktickit.com');
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
+    await page.getByTestId('nav-ticket-queue').click();
     await expect(page.getByTestId('staff-ticket-queue')).toBeVisible();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '30b-responsive-queue-desktop.png') });
 
@@ -290,6 +298,7 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-email-input').fill('admin@toktickit.com');
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
+    await page.getByTestId('nav-user-management').click();
     await expect(page.getByTestId('user-management-page')).toBeVisible();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '30d-responsive-admin-desktop.png') });
 
@@ -305,10 +314,12 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-email-input').fill('alex.thompson@toktickit.com');
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
+    await page.getByTestId('nav-ticket-queue').click();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '31b-responsive-queue-tablet.png') });
 
     // 9.3 Mobile Viewports (375px)
     await page.setViewportSize({ width: 375, height: 667 });
+    await page.getByTestId('nav-ticket-queue').click();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '32b-responsive-queue-mobile.png') });
 
     const mobileViewBtn = page.locator('[data-testid^="view-ticket-mobile-"]').first();

@@ -33,6 +33,12 @@ function getTabFromUrl(): string | null {
   if (path.includes("/staff/dashboard") || hash === "#staff-dashboard") {
     return "staff-dashboard";
   }
+  if (path.includes("/staff/tickets") || hash === "#ticket-queue") {
+    return "ticket-queue";
+  }
+  if (path.includes("/admin/users") || hash === "#user-management") {
+    return "user-management";
+  }
   if (
     path.includes("/requester/dashboard") ||
     path === "/dashboard" ||
@@ -45,6 +51,32 @@ function getTabFromUrl(): string | null {
   if (path.includes("/tickets") || hash === "#my-tickets") {
     return "my-tickets";
   }
+  return null;
+}
+
+function getRoleRedirect(tab: string, role?: string): { targetTab: string; redirectPath: string } | null {
+  const isStaffOrAdmin = role === "IT_STAFF" || role === "ADMINISTRATOR";
+  const isRequester = role === "REQUESTER";
+
+  // Requesters can only access requester views
+  if (isRequester) {
+    if (tab === "staff-dashboard" || tab === "ticket-queue" || tab === "user-management") {
+      return { targetTab: "requester-dashboard", redirectPath: "/requester/dashboard" };
+    }
+  }
+
+  // Staff and Admins cannot access requester views
+  if (isStaffOrAdmin) {
+    if (tab === "my-tickets" || tab === "requester-dashboard") {
+      return { targetTab: "staff-dashboard", redirectPath: "/staff/dashboard" };
+    }
+  }
+
+  // Non-admin IT staff cannot access user management
+  if (role === "IT_STAFF" && tab === "user-management") {
+    return { targetTab: "staff-dashboard", redirectPath: "/staff/dashboard" };
+  }
+
   return null;
 }
 
@@ -71,13 +103,12 @@ function MainContent() {
       const urlTab = getTabFromUrl();
       const currentUser = userRef.current;
       if (urlTab) {
-        if (
-          (urlTab === "my-tickets" || urlTab === "requester-dashboard") &&
-          (currentUser?.role === "IT_STAFF" || currentUser?.role === "ADMINISTRATOR")
-        ) {
-          setActiveTab("staff-dashboard");
-        } else if (urlTab === "staff-dashboard" && currentUser?.role === "REQUESTER") {
-          setActiveTab("requester-dashboard");
+        const redirect = getRoleRedirect(urlTab, currentUser?.role);
+        if (redirect) {
+          setActiveTab(redirect.targetTab);
+          if (typeof window !== "undefined" && window.history && window.history.replaceState) {
+            window.history.replaceState(null, "", redirect.redirectPath);
+          }
         } else {
           setActiveTab(urlTab);
         }
@@ -120,15 +151,11 @@ function MainContent() {
           }
         }
       } else {
-        if (urlTab === "requester-dashboard" && isStaffOrAdmin) {
-          setActiveTab("staff-dashboard");
+        const redirect = getRoleRedirect(urlTab, user.role);
+        if (redirect) {
+          setActiveTab(redirect.targetTab);
           if (typeof window !== "undefined" && window.history && window.history.replaceState) {
-            window.history.replaceState(null, "", "/staff/dashboard");
-          }
-        } else if (urlTab === "staff-dashboard" && user.role === "REQUESTER") {
-          setActiveTab("requester-dashboard");
-          if (typeof window !== "undefined" && window.history && window.history.replaceState) {
-            window.history.replaceState(null, "", "/requester/dashboard");
+            window.history.replaceState(null, "", redirect.redirectPath);
           }
         } else {
           setActiveTab(urlTab);
@@ -143,6 +170,9 @@ function MainContent() {
     setQueueFilters(filters);
     setSelectedTicketId(null);
     setActiveTab("ticket-queue");
+    if (typeof window !== "undefined" && window.history && window.history.pushState) {
+      window.history.pushState(null, "", "/staff/tickets");
+    }
   };
 
   // Health check baseline state (for Lab 1 compliance)
@@ -220,6 +250,10 @@ function MainContent() {
               window.history.pushState(null, "", "/staff/dashboard");
             } else if (tab === "my-tickets") {
               window.history.pushState(null, "", "/tickets");
+            } else if (tab === "ticket-queue") {
+              window.history.pushState(null, "", "/staff/tickets");
+            } else if (tab === "user-management") {
+              window.history.pushState(null, "", "/admin/users");
             }
           }
         }}
