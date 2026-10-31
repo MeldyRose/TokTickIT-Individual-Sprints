@@ -73,9 +73,13 @@ function MainContent() {
       if (urlTab) {
         if (
           (urlTab === "my-tickets" || urlTab === "requester-dashboard") &&
-          (currentUser?.role === "IT_STAFF" || currentUser?.role === "ADMINISTRATOR")
+          currentUser?.role === "IT_STAFF"
         ) {
           setActiveTab("staff-dashboard");
+        } else if (
+          (urlTab === "my-tickets" || urlTab === "requester-dashboard") && currentUser?.role === "ADMINISTRATOR"
+        ) {
+          setActiveTab("user-management");
         } else if (urlTab === "staff-dashboard" && currentUser?.role === "REQUESTER") {
           setActiveTab("requester-dashboard");
         } else {
@@ -113,14 +117,18 @@ function MainContent() {
       }
 
       if (!urlTab) {
-        if (isStaffOrAdmin) {
+        if (user.role === "ADMINISTRATOR") {
+          setActiveTab("user-management");
+        } else if (user.role === "IT_STAFF") {
           setActiveTab("staff-dashboard");
           if (typeof window !== "undefined" && window.history && window.history.replaceState) {
             window.history.replaceState(null, "", "/staff/dashboard");
           }
         }
       } else {
-        if (urlTab === "requester-dashboard" && isStaffOrAdmin) {
+        if (urlTab === "requester-dashboard" && user.role === "ADMINISTRATOR") {
+          setActiveTab("user-management");
+        } else if (urlTab === "requester-dashboard" && user.role === "IT_STAFF") {
           setActiveTab("staff-dashboard");
           if (typeof window !== "undefined" && window.history && window.history.replaceState) {
             window.history.replaceState(null, "", "/staff/dashboard");

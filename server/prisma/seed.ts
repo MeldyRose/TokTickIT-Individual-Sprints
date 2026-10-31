@@ -554,6 +554,8 @@ async function main() {
   }
 
   // 7. Actions Taken
+  const seedActionIds = ACTIONS_TAKEN.map((a) => a.id);
+  await prisma.actionTaken.deleteMany({ where: { id: { notIn: seedActionIds } } });
   for (const a of ACTIONS_TAKEN) {
     const tId = ticketMap[a.ticketId] || a.ticketId;
     const pId = userMap[a.performerId] || a.performerId;
