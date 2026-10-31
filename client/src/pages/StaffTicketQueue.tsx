@@ -10,18 +10,52 @@ import {
 } from "../api";
 import { StatusBadge, PriorityBadge } from "../components/Badge";
 
-interface StaffTicketQueueProps {
-  onSelectTicket: (ticketId: string) => void;
+export interface QueueInitialFilters {
+  ownership?: string;
+  status?: string;
+  priority?: string;
+  search?: string;
+  categoryId?: string;
+  resolvedRange?: string;
 }
 
-export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTicket }) => {
+interface StaffTicketQueueProps {
+  onSelectTicket: (ticketId: string) => void;
+  initialFilters?: QueueInitialFilters;
+}
+
+export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTicket, initialFilters }) => {
   // Filters and Control States
-  const [searchInput, setSearchInput] = useState<string>("");
-  const [debouncedSearch, setDebouncedSearch] = useState<string>("");
-  const [categoryId, setCategoryId] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
-  const [priorityFilter, setPriorityFilter] = useState<string>("");
-  const [ownerFilter, setOwnerFilter] = useState<string>("all");
+  const [searchInput, setSearchInput] = useState<string>(initialFilters?.search || "");
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(initialFilters?.search || "");
+  const [categoryId, setCategoryId] = useState<string>(initialFilters?.categoryId || "");
+  const [statusFilter, setStatusFilter] = useState<string>(initialFilters?.status || "");
+  const [priorityFilter, setPriorityFilter] = useState<string>(initialFilters?.priority || "");
+  const [ownerFilter, setOwnerFilter] = useState<string>(initialFilters?.ownership || "all");
+  const [resolvedRange, setResolvedRange] = useState<string>(initialFilters?.resolvedRange || "");
+
+  useEffect(() => {
+    if (initialFilters) {
+      setSearchInput(initialFilters.search || "");
+      setDebouncedSearch(initialFilters.search || "");
+      setCategoryId(initialFilters.categoryId || "");
+      setStatusFilter(initialFilters.status || "");
+      setPriorityFilter(initialFilters.priority || "");
+      setOwnerFilter(initialFilters.ownership || "all");
+      setResolvedRange(initialFilters.resolvedRange || "");
+      setPage(1);
+    } else {
+      setSearchInput("");
+      setDebouncedSearch("");
+      setCategoryId("");
+      setStatusFilter("");
+      setPriorityFilter("");
+      setOwnerFilter("all");
+      setResolvedRange("");
+      setSortOption("createdAt-desc");
+      setPage(1);
+    }
+  }, [initialFilters]);
   const [sortOption, setSortOption] = useState<string>("createdAt-desc");
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
@@ -77,6 +111,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
       status: statusFilter || undefined,
       priority: priorityFilter || undefined,
       owner: ownerFilter === "all" ? undefined : ownerFilter,
+      resolvedRange: resolvedRange || undefined,
       sortBy,
       sortOrder: order,
     })
@@ -103,7 +138,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
     return () => {
       isSubscribed = false;
     };
-  }, [debouncedSearch, categoryId, statusFilter, priorityFilter, ownerFilter, sortOption, page, pageSize]);
+  }, [debouncedSearch, categoryId, statusFilter, priorityFilter, ownerFilter, resolvedRange, sortOption, page, pageSize]);
 
   const handleClearFilters = () => {
     setSearchInput("");
@@ -112,6 +147,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
     setStatusFilter("");
     setPriorityFilter("");
     setOwnerFilter("all");
+    setResolvedRange("");
     setSortOption("createdAt-desc");
     setPage(1);
   };
@@ -207,6 +243,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
                 data-testid="queue-status-select"
               >
                 <option value="">All Statuses</option>
+                <option value="open">Open / Active Backlog</option>
                 <option value="NEW">New</option>
                 <option value="OPEN">Open</option>
                 <option value="IN_PROGRESS">In Progress</option>
@@ -234,6 +271,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
                 data-testid="queue-priority-select"
               >
                 <option value="">All Priorities</option>
+                <option value="URGENT,HIGH">Urgent & High</option>
                 <option value="LOW">Low</option>
                 <option value="MEDIUM">Medium</option>
                 <option value="HIGH">High</option>

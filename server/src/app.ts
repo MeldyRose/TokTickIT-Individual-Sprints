@@ -13,6 +13,7 @@ import { dashboardRouter } from "./routes/dashboard.js";
 import { resolveAuthUser } from "./utils/auth.js";
 import { sessionStore } from "./services/sessionStore.js";
 import { isValidStatusTransition, getPermittedNextStatuses } from "./utils/statusMatrix.js";
+import { ACTIVE_TICKET_STATUSES, getStartOfDay, getDaysAgo } from "./utils/dashboardUtils.js";
 
 // Ensure uploads folder exists
 const uploadDir = path.join(process.cwd(), "uploads");
@@ -173,6 +174,7 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
     const relatedSystemId = (req.query.relatedSystemId || req.query.system) as string;
     const priority = (req.query.priority || req.query.itPriority) as string;
     const owner = (req.query.owner || req.query.ownerId) as string;
+    const resolvedRange = req.query.resolvedRange as string;
 
     const rawSortBy = (req.query.sortBy as string) || "createdAt";
     let sortBy = "createdAt";
@@ -195,19 +197,47 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
       where.relatedSystemId = relatedSystemId;
     }
 
-    if (status && ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"].includes(status)) {
-      where.currentStatus = status as TicketStatus;
+    if (status) {
+      if (status === "open" || status === "active") {
+        where.currentStatus = { in: ACTIVE_TICKET_STATUSES };
+      } else if (
+        ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"].includes(
+          status.toUpperCase()
+        )
+      ) {
+        where.currentStatus = status.toUpperCase() as TicketStatus;
+      }
     }
 
-    if (priority && ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(priority)) {
-      where.itPriority = priority;
+    if (priority) {
+      const parts = priority.split(",").map((p) => p.trim().toUpperCase());
+      const validPriorities = parts.filter((p) => ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(p));
+      if (validPriorities.length === 1) {
+        where.itPriority = validPriorities[0];
+      } else if (validPriorities.length > 1) {
+        where.itPriority = { in: validPriorities };
+      }
+    }
+
+    if (resolvedRange === "today") {
+      where.resolvedAt = { gte: getStartOfDay() };
+    } else if (resolvedRange === "7d" || resolvedRange === "last7days") {
+      where.resolvedAt = { gte: getDaysAgo(7) };
+    } else if (resolvedRange === "30d") {
+      where.resolvedAt = { gte: getDaysAgo(30) };
     }
 
     if (owner) {
       if (owner === "unassigned") {
         where.ownerId = null;
+        if (!status) {
+          where.currentStatus = { in: ACTIVE_TICKET_STATUSES };
+        }
       } else if (owner === "me") {
         where.ownerId = authUser.id;
+        if (!status) {
+          where.currentStatus = { in: ACTIVE_TICKET_STATUSES };
+        }
       } else {
         where.ownerId = owner;
       }

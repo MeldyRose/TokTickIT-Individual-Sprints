@@ -7,7 +7,8 @@ import { ChangePasswordModal } from "./components/ChangePasswordModal";
 import { CreateTicket } from "./components/CreateTicket";
 import { MyTickets } from "./components/MyTickets";
 import { RequesterTicketDetail } from "./pages/RequesterTicketDetail";
-import { StaffTicketQueue } from "./pages/StaffTicketQueue";
+import { StaffTicketQueue, QueueInitialFilters } from "./pages/StaffTicketQueue";
+import { StaffDashboard } from "./pages/StaffDashboard";
 import { UserManagement } from "./pages/UserManagement";
 
 type UiState = "idle" | "loading" | "success" | "error";
@@ -16,17 +17,22 @@ function MainContent() {
   const { user, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("my-tickets");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [queueFilters, setQueueFilters] = useState<QueueInitialFilters | undefined>(undefined);
   const [showVoluntaryPasswordModal, setShowVoluntaryPasswordModal] = useState<boolean>(false);
 
   useEffect(() => {
     if (user) {
-      if (user.role === "IT_STAFF" && activeTab === "my-tickets") {
-        setActiveTab("ticket-queue");
-      } else if (user.role === "ADMINISTRATOR" && activeTab === "my-tickets") {
-        setActiveTab("user-management");
+      if ((user.role === "IT_STAFF" || user.role === "ADMINISTRATOR") && activeTab === "my-tickets") {
+        setActiveTab("staff-dashboard");
       }
     }
   }, [user]);
+
+  const handleDrillDownToQueue = (filters?: QueueInitialFilters) => {
+    setQueueFilters(filters);
+    setSelectedTicketId(null);
+    setActiveTab("ticket-queue");
+  };
 
   // Health check baseline state (for Lab 1 compliance)
   const [state, setState] = useState<UiState>("idle");
@@ -85,6 +91,9 @@ function MainContent() {
         activeTab={activeTab === "ticket-detail" ? "my-tickets" : activeTab}
         onTabChange={(tab) => {
           setSelectedTicketId(null);
+          if (tab === "ticket-queue") {
+            setQueueFilters(undefined);
+          }
           setActiveTab(tab);
         }}
         onChangePasswordClick={() => setShowVoluntaryPasswordModal(true)}
@@ -97,12 +106,21 @@ function MainContent() {
       <main>
         {activeTab === "ticket-detail" && selectedTicketId ? (
           <RequesterTicketDetail ticketId={selectedTicketId} onBack={handleBackToMyTickets} />
+        ) : activeTab === "staff-dashboard" ? (
+          <StaffDashboard
+            onNavigateToQueue={handleDrillDownToQueue}
+            onSelectTicket={handleSelectTicket}
+            onCreateTicket={() => {
+              setSelectedTicketId(null);
+              setActiveTab("create-ticket");
+            }}
+          />
         ) : activeTab === "create-ticket" ? (
           <CreateTicket onSuccess={handleBackToMyTickets} onCancel={handleBackToMyTickets} />
         ) : activeTab === "user-management" ? (
           <UserManagement />
         ) : activeTab === "ticket-queue" ? (
-          <StaffTicketQueue onSelectTicket={handleSelectTicket} />
+          <StaffTicketQueue onSelectTicket={handleSelectTicket} initialFilters={queueFilters} />
         ) : (
           <>
             <MyTickets
