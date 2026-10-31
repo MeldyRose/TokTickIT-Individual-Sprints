@@ -274,6 +274,7 @@ export async function fetchMyTickets(
     categoryId?: string;
     status?: string;
     relatedSystemId?: string;
+    resolvedRange?: string;
     sortBy?: string;
     order?: string;
   },
@@ -889,6 +890,54 @@ export async function fetchStaffDashboard(): Promise<StaffDashboardResponse> {
   if (!res.ok) {
     const errorMsg = json?.error?.message || json?.error || "Failed to load staff dashboard";
     const err = new Error(typeof errorMsg === "string" ? errorMsg : "Failed to load staff dashboard");
+    (err as any).status = res.status;
+    (err as any).code = json?.error?.code || json?.code;
+    throw err;
+  }
+
+  return json;
+}
+
+export interface RequesterDashboardMetrics {
+  totalOpen: number;
+  totalActive: number;
+  waitingForRequester: number;
+  waitingForMyInput: number;
+  recentlyUpdated: number;
+  recentlyResolved: number;
+  resolvedRecently: number;
+  inProgress?: number;
+  closed?: number;
+}
+
+export interface RequesterDashboardRecentTicket {
+  id: string;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: TicketStatus;
+  actionRequired: boolean;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface RequesterDashboardResponse {
+  metrics: RequesterDashboardMetrics;
+  recentTickets: RequesterDashboardRecentTicket[];
+  recentActivity?: RequesterDashboardRecentTicket[];
+  calculatedAt?: string;
+}
+
+export async function fetchRequesterDashboard(): Promise<RequesterDashboardResponse> {
+  const res = await fetch(`${API_URL}/api/dashboard/requester`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const errorMsg = json?.error?.message || json?.error || "Failed to load requester dashboard";
+    const err = new Error(typeof errorMsg === "string" ? errorMsg : "Failed to load requester dashboard");
     (err as any).status = res.status;
     (err as any).code = json?.error?.code || json?.code;
     throw err;

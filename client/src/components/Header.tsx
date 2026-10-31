@@ -42,9 +42,20 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {onTabChange && (
-          <nav className="d-flex align-items-center gap-2 my-2 my-md-0">
+          <nav className="d-flex flex-wrap align-items-center gap-2 my-2 my-md-0" data-testid="main-navigation">
             {user.role === "REQUESTER" && (
               <>
+                <button
+                  className={`btn btn-sm ${
+                    activeTab === "requester-dashboard"
+                      ? "btn-light fw-bold text-success"
+                      : "btn-outline-light"
+                  }`}
+                  onClick={() => onTabChange("requester-dashboard")}
+                  data-testid="nav-requester-dashboard"
+                >
+                  Dashboard
+                </button>
                 <button
                   className={`btn btn-sm ${
                     activeTab === "my-tickets" ? "btn-light fw-bold text-success" : "btn-outline-light"
