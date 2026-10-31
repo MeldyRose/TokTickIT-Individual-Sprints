@@ -181,7 +181,7 @@ All protected endpoints enforce server-side session authentication (`toktickit_s
 ## Sprint Documentation
 
 Comprehensive sprint contracts, traceability matrices, and review records:
-- **Lab 4 Documentation:** [`docs/lab-04/`](docs/lab-04/README.md)
+- **Lab 4 Documentation:** [`docs/lab-04/`](docs/lab-04/specification.md)
   - [`specification.md`](docs/lab-04/specification.md)
   - [`tests.md`](docs/lab-04/tests.md)
   - [`api-spec.md`](docs/lab-04/api-spec.md)
