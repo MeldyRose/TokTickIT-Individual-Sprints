@@ -14,6 +14,18 @@ import { UserManagement } from "./pages/UserManagement";
 
 type UiState = "idle" | "loading" | "success" | "error";
 
+function getQueryParamsFromUrl(): { status?: string; resolvedRange?: string } {
+  if (typeof window === "undefined") return {};
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("status") || undefined;
+    const resolvedRange = params.get("resolvedRange") || undefined;
+    return { status, resolvedRange };
+  } catch {
+    return {};
+  }
+}
+
 function getTabFromUrl(): string | null {
   if (typeof window === "undefined") return null;
   const path = window.location.pathname.toLowerCase();
@@ -44,16 +56,28 @@ function MainContent() {
   });
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const [queueFilters, setQueueFilters] = useState<QueueInitialFilters | undefined>(undefined);
-  const [requesterStatusFilter, setRequesterStatusFilter] = useState<string | undefined>(undefined);
-  const [requesterResolvedRange, setRequesterResolvedRange] = useState<string | undefined>(undefined);
+  const [requesterStatusFilter, setRequesterStatusFilter] = useState<string | undefined>(() => getQueryParamsFromUrl().status);
+  const [requesterResolvedRange, setRequesterResolvedRange] = useState<string | undefined>(() => getQueryParamsFromUrl().resolvedRange);
   const [showVoluntaryPasswordModal, setShowVoluntaryPasswordModal] = useState<boolean>(false);
 
   useEffect(() => {
     const onLocationChange = () => {
       const urlTab = getTabFromUrl();
       if (urlTab) {
-        setActiveTab(urlTab);
+        if (
+          (urlTab === "my-tickets" || urlTab === "requester-dashboard") &&
+          (user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR")
+        ) {
+          setActiveTab("staff-dashboard");
+        } else if (urlTab === "staff-dashboard" && user?.role === "REQUESTER") {
+          setActiveTab("requester-dashboard");
+        } else {
+          setActiveTab(urlTab);
+        }
       }
+      const q = getQueryParamsFromUrl();
+      setRequesterStatusFilter(q.status);
+      setRequesterResolvedRange(q.resolvedRange);
     };
     window.addEventListener("popstate", onLocationChange);
     window.addEventListener("hashchange", onLocationChange);
@@ -65,16 +89,34 @@ function MainContent() {
 
   useEffect(() => {
     if (user) {
-      const urlTab = getTabFromUrl();
+      const isStaffOrAdmin = user.role === "IT_STAFF" || user.role === "ADMINISTRATOR";
+      let urlTab = getTabFromUrl();
+
+      // For staff/admin, treat "my-tickets" like null so they land on staff-dashboard
+      if (isStaffOrAdmin && urlTab === "my-tickets") {
+        urlTab = null;
+      }
+
       if (!urlTab) {
-        if ((user.role === "IT_STAFF" || user.role === "ADMINISTRATOR") && activeTab === "my-tickets") {
+        if (isStaffOrAdmin) {
           setActiveTab("staff-dashboard");
+          if (typeof window !== "undefined" && window.history && window.history.replaceState) {
+            window.history.replaceState(null, "", "/staff/dashboard");
+          }
         }
       } else {
-        if (urlTab === "requester-dashboard" && (user.role === "IT_STAFF" || user.role === "ADMINISTRATOR")) {
+        if (urlTab === "requester-dashboard" && isStaffOrAdmin) {
           setActiveTab("staff-dashboard");
+          if (typeof window !== "undefined" && window.history && window.history.replaceState) {
+            window.history.replaceState(null, "", "/staff/dashboard");
+          }
         } else if (urlTab === "staff-dashboard" && user.role === "REQUESTER") {
           setActiveTab("requester-dashboard");
+          if (typeof window !== "undefined" && window.history && window.history.replaceState) {
+            window.history.replaceState(null, "", "/requester/dashboard");
+          }
+        } else {
+          setActiveTab(urlTab);
         }
       }
     }
@@ -116,6 +158,9 @@ function MainContent() {
     setRequesterStatusFilter(undefined);
     setRequesterResolvedRange(undefined);
     setActiveTab("my-tickets");
+    if (typeof window !== "undefined" && window.history && window.history.pushState) {
+      window.history.pushState(null, "", "/tickets");
+    }
   };
 
   if (isLoading) {

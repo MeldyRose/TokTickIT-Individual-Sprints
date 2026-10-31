@@ -317,7 +317,6 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
           closed: 0,
         },
         recentTickets: [],
-        recentActivity: [],
       });
 
       render(<RequesterDashboard />);
@@ -488,6 +487,77 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       expect(screen.getByTestId("requester-dashboard-title")).toHaveTextContent("My IT Support Dashboard");
 
       // Reset URL
+      window.history.pushState(null, "", "/");
+    });
+
+    it("redirects IT_STAFF to staff-dashboard when URL is /tickets", async () => {
+      window.history.pushState(null, "", "/tickets");
+      const staffUser: api.AuthUser = {
+        id: "u_staff_lisa",
+        name: "Lisa Martinez",
+        email: "lisa.martinez@toktickit.com",
+        role: "IT_STAFF",
+        mustChangePassword: false,
+      };
+      vi.spyOn(AuthContextModule, "useAuth").mockReturnValue({
+        user: staffUser,
+        isAuthenticated: true,
+        isLoading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        changePassword: vi.fn(),
+        refreshUser: vi.fn(),
+      });
+      vi.spyOn(api, "fetchStaffDashboard").mockResolvedValue({
+        metrics: {
+          totalOpen: 10,
+          unassigned: 2,
+          ownedByMe: 3,
+          myAssigned: 3,
+          waitingForRequester: 1,
+          urgentOrHigh: 2,
+          resolvedToday: 4,
+          avgResolutionMinutes: 120,
+          avgResolutionFormatted: "2h",
+          recentlyUpdated: 5,
+        },
+        breakdown: { byStatus: [], byPriority: [] },
+        recentTickets: [],
+        calculatedAt: "2026-10-31T00:00:00.000Z",
+      });
+
+      render(<App />);
+
+      expect(await screen.findByTestId("staff-dashboard")).toBeInTheDocument();
+      expect(screen.getByTestId("nav-staff-dashboard")).toHaveClass("btn-light");
+      expect(window.location.pathname).toBe("/staff/dashboard");
+
+      window.history.pushState(null, "", "/");
+    });
+
+    it("reads query string filter on initial page load (e.g. /tickets?status=CLOSED)", async () => {
+      window.history.pushState(null, "", "/tickets?status=CLOSED");
+      render(<App />);
+
+      const statusFilter = (await screen.findByTestId("status-filter")) as HTMLSelectElement;
+      expect(statusFilter.value).toBe("CLOSED");
+
+      window.history.pushState(null, "", "/");
+    });
+
+    it("updates URL to /tickets when returning via handleBackToMyTickets", async () => {
+      window.history.pushState(null, "", "/tickets?status=CLOSED");
+      render(<App />);
+
+      const createNavBtn = await screen.findByTestId("nav-create-ticket");
+      fireEvent.click(createNavBtn);
+
+      const cancelBtn = await screen.findByRole("button", { name: /cancel/i });
+      fireEvent.click(cancelBtn);
+
+      expect(window.location.pathname).toBe("/tickets");
+      expect(window.location.search).toBe("");
+
       window.history.pushState(null, "", "/");
     });
   });

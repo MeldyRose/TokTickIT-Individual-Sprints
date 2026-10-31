@@ -923,7 +923,7 @@ export interface RequesterDashboardRecentTicket {
 export interface RequesterDashboardResponse {
   metrics: RequesterDashboardMetrics;
   recentTickets: RequesterDashboardRecentTicket[];
-  recentActivity: RequesterDashboardRecentTicket[];
+  recentActivity?: RequesterDashboardRecentTicket[];
   calculatedAt?: string;
 }
 
