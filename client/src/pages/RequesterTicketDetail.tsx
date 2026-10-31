@@ -14,6 +14,9 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { StatusBadge, PriorityBadge } from "../components/Badge";
 import { InternalNotesSection } from "../components/InternalNotesSection";
+import { TicketWorkflowControls } from "../components/TicketWorkflowControls";
+import { ConcurrencyConflictBanner } from "../components/ConcurrencyConflictBanner";
+import { ActionsTakenSection } from "../components/ActionsTakenSection";
 
 interface RequesterTicketDetailProps {
   ticketId: string;
@@ -48,6 +51,53 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
   const [showResolveModal, setShowResolveModal] = useState<boolean>(false);
   const [resolutionNote, setResolutionNote] = useState<string>("");
   const [resolveSubmitting, setResolveSubmitting] = useState<boolean>(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+
+  const handleRefreshTicket = async () => {
+    if (!ticketId) return;
+    setLoading(true);
+    setConflictError(null);
+    try {
+      const [ticketData, commentsData] = await Promise.all([
+        fetchTicketDetail(ticketId),
+        fetchPublicComments(ticketId).catch(() => []),
+      ]);
+      setTicket(ticketData);
+      setAttachments(ticketData.attachments || []);
+      setComments(commentsData || []);
+    } catch (err: any) {
+      setError(err?.message || "Failed to reload ticket");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWorkflowStatusUpdated = async (newStatus: any, resolutionSummary?: string) => {
+    setTicket((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentStatus: newStatus,
+            resolutionSummary: resolutionSummary !== undefined ? resolutionSummary : prev.resolutionSummary,
+          }
+        : null
+    );
+    try {
+      const [ticketData, commentsData] = await Promise.all([
+        fetchTicketDetail(ticketId),
+        fetchPublicComments(ticketId).catch(() => comments),
+      ]);
+      setTicket({
+        ...ticketData,
+        currentStatus: newStatus || ticketData.currentStatus,
+        resolutionSummary:
+          ticketData.resolutionSummary ?? resolutionSummary ?? null,
+      });
+      setComments(commentsData || []);
+    } catch {
+      // Keep optimistic update
+    }
+  };
 
   useEffect(() => {
     if (!user || !ticketId) return;
@@ -164,25 +214,36 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
     if (!ticketId || resolveSubmitting) return;
 
     setResolveSubmitting(true);
+    setConflictError(null);
     try {
       const res = await updateRequesterTicketStatus(
         ticketId,
         "WAITING_FOR_REQUESTER",
-        resolutionNote.trim() || "Problem appears resolved by Requester."
+        resolutionNote.trim() || "Problem appears resolved by Requester.",
+        ticket?.updatedAt
       );
       if (ticket) {
-        setTicket({ ...ticket, currentStatus: res.currentStatus });
+        setTicket({ ...ticket, currentStatus: res.currentStatus, updatedAt: res.updatedAt || ticket.updatedAt });
       }
       const updatedComments = await fetchPublicComments(ticketId).catch(() => comments);
       setComments(updatedComments);
       setShowResolveModal(false);
       setResolutionNote("");
     } catch (err: any) {
-      alert(err?.message || "Failed to update ticket status");
+      if (err?.status === 409 || err?.code === "STALE_UPDATE" || err?.message?.toLowerCase().includes("conflict") || err?.message?.toLowerCase().includes("stale")) {
+        setConflictError(
+          err?.message ||
+            "This ticket was updated by another user while you were viewing it. To prevent overwriting their changes, your update was not saved. Please reload the latest changes."
+        );
+        setShowResolveModal(false);
+      } else {
+        alert(err?.message || "Failed to update ticket status");
+      }
     } finally {
       setResolveSubmitting(false);
     }
   };
+
 
   if (loading) {
     return (
@@ -229,7 +290,7 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
 
         <div className="d-flex align-items-center gap-2">
           {/* Problem Appears Resolved Action Button (AC-09, BR-05) */}
-          {isActiveTicket && (
+          {(!user || user.role === "REQUESTER") && isActiveTicket && (
             <button
               className="btn text-white btn-sm fw-semibold px-3"
               style={{ backgroundColor: "#006B3C" }}
@@ -249,6 +310,25 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
           </button>
         </div>
       </div>
+
+      {/* Concurrency Conflict Banner */}
+      {conflictError && (
+        <ConcurrencyConflictBanner
+          message={conflictError}
+          onRefresh={handleRefreshTicket}
+          onDismiss={() => setConflictError(null)}
+        />
+      )}
+
+      {/* Role-Aware Ticket Workflow Status Transition Controls */}
+      {ticket && (user?.role === "IT_STAFF" || user?.role === "ADMINISTRATOR") && (
+        <TicketWorkflowControls
+          ticket={ticket}
+          comments={comments}
+          onStatusUpdated={handleWorkflowStatusUpdated}
+          onRefreshTicket={handleRefreshTicket}
+        />
+      )}
 
       {/* Main Ticket Read-Only Metadata Card */}
       <div className="card shadow-sm border-0 p-4 mb-4" style={{ borderRadius: 12, backgroundColor: "#FFFFFF" }}>
@@ -348,13 +428,15 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
           <div className="col-12">
             <label className="form-label small fw-semibold text-secondary mb-1">Resolution Summary</label>
             <textarea
-              className="form-control form-control-sm bg-light text-muted fst-italic"
+              className="form-control form-control-sm bg-light font-monospace"
               rows={2}
               readOnly
+              data-testid="detail-resolution-summary"
               value={
-                ticket.currentStatus === "RESOLVED" || ticket.currentStatus === "CLOSED"
-                  ? "Issue resolved."
-                  : "No resolution summary available yet."
+                ticket.resolutionSummary ||
+                (ticket.currentStatus === "RESOLVED" || ticket.currentStatus === "CLOSED"
+                  ? "No resolution summary provided."
+                  : "No resolution summary available yet.")
               }
             />
           </div>
@@ -610,6 +692,15 @@ export const RequesterTicketDetail: React.FC<RequesterTicketDetailProps> = ({ ti
             </table>
           </div>
         )}
+      </div>
+
+      <div className="mt-4">
+        <ActionsTakenSection
+          ticketId={ticketId}
+          ticketIsUnassigned={!ticket.ownerId}
+          ticketStatus={ticket.currentStatus}
+          onActionAddedOrUpdated={handleRefreshTicket}
+        />
       </div>
 
       {user?.role !== "REQUESTER" && (

@@ -42,9 +42,20 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {onTabChange && (
-          <nav className="d-flex align-items-center gap-2 my-2 my-md-0">
+          <nav className="d-flex flex-wrap align-items-center gap-2 my-2 my-md-0" data-testid="main-navigation">
             {user.role === "REQUESTER" && (
               <>
+                <button
+                  className={`btn btn-sm ${
+                    activeTab === "requester-dashboard"
+                      ? "btn-light fw-bold text-success"
+                      : "btn-outline-light"
+                  }`}
+                  onClick={() => onTabChange("requester-dashboard")}
+                  data-testid="nav-requester-dashboard"
+                >
+                  Dashboard
+                </button>
                 <button
                   className={`btn btn-sm ${
                     activeTab === "my-tickets" ? "btn-light fw-bold text-success" : "btn-outline-light"
@@ -70,7 +81,18 @@ export const Header: React.FC<HeaderProps> = ({
               <>
                 <button
                   className={`btn btn-sm ${
-                    activeTab === "ticket-queue" || activeTab === "my-tickets"
+                    activeTab === "staff-dashboard"
+                      ? "btn-light fw-bold text-success"
+                      : "btn-outline-light"
+                  }`}
+                  onClick={() => onTabChange("staff-dashboard")}
+                  data-testid="nav-staff-dashboard"
+                >
+                  Dashboard
+                </button>
+                <button
+                  className={`btn btn-sm ${
+                    activeTab === "ticket-queue"
                       ? "btn-light fw-bold text-success"
                       : "btn-outline-light"
                   }`}
@@ -92,15 +114,39 @@ export const Header: React.FC<HeaderProps> = ({
             )}
 
             {user.role === "ADMINISTRATOR" && (
-              <button
-                className={`btn btn-sm ${
-                  activeTab === "user-management" ? "btn-light fw-bold text-success" : "btn-outline-light"
-                }`}
-                onClick={() => onTabChange("user-management")}
-                data-testid="nav-user-management"
-              >
-                User Management
-              </button>
+              <>
+                <button
+                  className={`btn btn-sm ${
+                    activeTab === "staff-dashboard"
+                      ? "btn-light fw-bold text-success"
+                      : "btn-outline-light"
+                  }`}
+                  onClick={() => onTabChange("staff-dashboard")}
+                  data-testid="nav-staff-dashboard"
+                >
+                  Dashboard
+                </button>
+                <button
+                  className={`btn btn-sm ${
+                    activeTab === "ticket-queue"
+                      ? "btn-light fw-bold text-success"
+                      : "btn-outline-light"
+                  }`}
+                  onClick={() => onTabChange("ticket-queue")}
+                  data-testid="nav-ticket-queue"
+                >
+                  Ticket Queue
+                </button>
+                <button
+                  className={`btn btn-sm ${
+                    activeTab === "user-management" ? "btn-light fw-bold text-success" : "btn-outline-light"
+                  }`}
+                  onClick={() => onTabChange("user-management")}
+                  data-testid="nav-user-management"
+                >
+                  User Management
+                </button>
+              </>
             )}
           </nav>
         )}

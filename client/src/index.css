@@ -1,0 +1,8 @@
+/* TokTickIT Global Accessibility & Focus Ring Styles */
+
+.dashboard-metric-card:focus,
+.dashboard-metric-card:focus-visible {
+  outline: 2px solid #006B3C !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 3px rgba(0, 107, 60, 0.25) !important;
+}

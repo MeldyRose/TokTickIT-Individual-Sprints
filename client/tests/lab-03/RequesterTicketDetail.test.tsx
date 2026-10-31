@@ -127,7 +127,8 @@ describe("Requester Ticket Detail & Collaboration (Issue 16)", () => {
     expect(api.updateRequesterTicketStatus).toHaveBeenCalledWith(
       "tkt-001",
       "WAITING_FOR_REQUESTER",
-      expect.any(String)
+      expect.any(String),
+      expect.anything()
     );
   });
 });

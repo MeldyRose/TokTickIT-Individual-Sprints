@@ -130,6 +130,9 @@ const TICKETS = [
     currentStatus: TicketStatus.IN_PROGRESS,
     requesterId: "req-user-001",
     ownerId: "staff-user-001",
+    resolvedAt: null,
+    closedAt: null,
+    resolutionSummary: null,
   },
   {
     id: "tkt-002",
@@ -143,6 +146,9 @@ const TICKETS = [
     currentStatus: TicketStatus.NEW,
     requesterId: "req-user-002",
     ownerId: null,
+    resolvedAt: null,
+    closedAt: null,
+    resolutionSummary: null,
   },
   {
     id: "tkt-003",
@@ -156,6 +162,9 @@ const TICKETS = [
     currentStatus: TicketStatus.OPEN,
     requesterId: "req-user-003",
     ownerId: "staff-user-002",
+    resolvedAt: null,
+    closedAt: null,
+    resolutionSummary: null,
   },
   {
     id: "tkt-004",
@@ -169,6 +178,9 @@ const TICKETS = [
     currentStatus: TicketStatus.WAITING_FOR_REQUESTER,
     requesterId: "req-user-004",
     ownerId: "staff-user-001",
+    resolvedAt: null,
+    closedAt: null,
+    resolutionSummary: null,
   },
   {
     id: "tkt-005",
@@ -182,6 +194,59 @@ const TICKETS = [
     currentStatus: TicketStatus.RESOLVED,
     requesterId: "req-user-001",
     ownerId: "staff-user-003",
+    resolvedAt: new Date(),
+    createdAt: new Date(Date.now() - 225 * 60 * 1000),
+    closedAt: null,
+    resolutionSummary: "Re-configured Exchange ActiveSync profile on device and verified TLS certificate trust chain. Mobile sync completed successfully.",
+  },
+  {
+    id: "tkt-006",
+    ticketNumber: "TKT-2026-0006",
+    summary: "Campus Wi-Fi drops in Building 3, Room 302",
+    description: "Students and faculty report wireless disconnects every few minutes in room 302.",
+    categoryId: "cat-net-004",
+    relatedSystemId: "sys-002",
+    requestedPriority: RequestedPriority.HIGH,
+    itPriority: ITPriority.HIGH,
+    currentStatus: TicketStatus.CLOSED,
+    requesterId: "req-user-002",
+    ownerId: "staff-user-002",
+    resolvedAt: new Date(Date.now() - 86400 * 1000 * 5),
+    createdAt: new Date(Date.now() - 86400 * 1000 * 5 - (10 * 86400 * 1000 + 6.5 * 3600 * 1000)),
+    closedAt: new Date(Date.now() - 86400 * 1000 * 4),
+    resolutionSummary: "Replaced faulty wireless access point AP-B3-302 with spare Cisco Catalyst AP and verified coverage.",
+  },
+  {
+    id: "tkt-007",
+    ticketNumber: "TKT-2026-0007",
+    summary: "Intermittent packet loss on lab switch",
+    description: "Packet drops recurred during heavy afternoon lab sessions on Switch-SW02.",
+    categoryId: "cat-net-004",
+    relatedSystemId: "sys-003",
+    requestedPriority: RequestedPriority.URGENT,
+    itPriority: ITPriority.URGENT,
+    currentStatus: TicketStatus.REOPENED,
+    requesterId: "req-user-003",
+    ownerId: "staff-user-001",
+    resolvedAt: null,
+    closedAt: null,
+    resolutionSummary: null,
+  },
+  {
+    id: "tkt-008",
+    ticketNumber: "TKT-2026-0008",
+    summary: "SPSS statistics license activation on desktop",
+    description: "Need license activation for statistics class teaching station.",
+    categoryId: "cat-sfw-003",
+    relatedSystemId: "sys-005",
+    requestedPriority: RequestedPriority.LOW,
+    itPriority: ITPriority.LOW,
+    currentStatus: TicketStatus.RESOLVED,
+    requesterId: "req-user-004",
+    ownerId: "staff-user-003",
+    resolvedAt: new Date(Date.now() - 86400 * 1000 * 45),
+    closedAt: null,
+    resolutionSummary: "Installed network license manager configuration file and validated client license checkout.",
   },
 ];
 
@@ -218,6 +283,103 @@ const INTERNAL_NOTES = [
     ticketId: "tkt-003",
     authorId: "staff-user-002",
     content: "Paper jam cleared, toner level low at 12%. Scheduled replacement cartridge for Friday.",
+  },
+];
+
+const ACTIONS_TAKEN = [
+  // tkt-001: 2 actions across different IT staff performers (Alex Thompson and Kevin Patel)
+  {
+    id: "act-001",
+    ticketId: "tkt-001",
+    performerId: "staff-user-001",
+    actionDateTime: new Date("2026-10-28T09:15:00.000Z"),
+    description: "Connected to identity provider console and reviewed OAuth token session errors for Jennifer Anderson.",
+    result: "Found expired token refresh cache causing authentication loop on LEB2 application.",
+    followUpRequired: true,
+    followUpNote: "Request IAM administrator to clear cached SAML assertions if issue recurs.",
+    attachmentNotes: "idp_trace_leb2.log",
+  },
+  {
+    id: "act-002",
+    ticketId: "tkt-001",
+    performerId: "staff-user-003",
+    actionDateTime: new Date("2026-10-28T10:45:00.000Z"),
+    description: "Revoked stale session assertions and re-synchronized user profile permissions across LEB2 tenant.",
+    result: "User profile successfully re-indexed. Login challenge prompt refreshed.",
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: null,
+  },
+  // tkt-003: 1 action by Lisa Martinez
+  {
+    id: "act-003",
+    ticketId: "tkt-003",
+    performerId: "staff-user-002",
+    actionDateTime: new Date("2026-10-28T08:30:00.000Z"),
+    description: "Inspected physical paper tray 2 and cleared jammed paper scrap from roller feed assembly.",
+    result: "Roller turns freely without obstruction. Diagnostic print page dispatched successfully.",
+    followUpRequired: true,
+    followUpNote: "Order replacement pickup roller rubber kit if paper feed slips again.",
+    attachmentNotes: "printer_roller_error52.jpg",
+  },
+  // tkt-005: 2 actions (resolved ticket, resolved today) by Kevin Patel and Alex Thompson
+  {
+    id: "act-004",
+    ticketId: "tkt-005",
+    performerId: "staff-user-003",
+    actionDateTime: new Date(Date.now() - 3600 * 1000 * 3),
+    description: "Tested connection parameters from mobile network to ActiveSync endpoint.",
+    result: "Discovered client certificate was rejected by reverse proxy.",
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: null,
+  },
+  {
+    id: "act-005",
+    ticketId: "tkt-005",
+    performerId: "staff-user-001",
+    actionDateTime: new Date(Date.now() - 3600 * 1000 * 1),
+    description: "Pushed updated enterprise root CA certificate profile to user mobile device via MDM.",
+    result: "Exchange profile authenticated and downloaded new messages.",
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: "exchange_activesync_success.png",
+  },
+  // tkt-006: 1 action by Lisa Martinez
+  {
+    id: "act-006",
+    ticketId: "tkt-006",
+    performerId: "staff-user-002",
+    actionDateTime: new Date(Date.now() - 86400 * 1000 * 5),
+    description: "Ran cable diagnostic on patch panel port 14 and identified open pair at 12 meters.",
+    result: "Confirmed severed RJ45 connector crimp on wall jack.",
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: null,
+  },
+  // tkt-007: 1 action by Alex Thompson
+  {
+    id: "act-007",
+    ticketId: "tkt-007",
+    performerId: "staff-user-001",
+    actionDateTime: new Date(Date.now() - 3600 * 1000 * 5),
+    description: "Re-opened investigation after user reported intermittent packet loss resumed on Switch-SW02.",
+    result: "Captured tcpdump packet traces and identified buffer overruns during peak hours.",
+    followUpRequired: true,
+    followUpNote: "Schedule off-hours firmware upgrade for Switch-SW02.",
+    attachmentNotes: "switch_buffer_drop.pcapng",
+  },
+  // tkt-008: 1 action by Kevin Patel
+  {
+    id: "act-008",
+    ticketId: "tkt-008",
+    performerId: "staff-user-003",
+    actionDateTime: new Date(Date.now() - 86400 * 1000 * 45),
+    description: "Provisioned SPSS statistics network license seat and updated client license configuration.",
+    result: "SPSS software launched and license checkout confirmed on server.",
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: null,
   },
 ];
 
@@ -281,6 +443,13 @@ async function main() {
   const sysMap = Object.fromEntries(dbSystems.map((s) => [s.name, s.id]));
 
   // 4. Tickets
+  const seedTicketIds = TICKETS.map((t) => t.id);
+  await prisma.actionTaken.deleteMany({ where: { ticketId: { notIn: seedTicketIds } } });
+  await prisma.publicComment.deleteMany({ where: { ticketId: { notIn: seedTicketIds } } });
+  await prisma.internalNote.deleteMany({ where: { ticketId: { notIn: seedTicketIds } } });
+  await prisma.attachment.deleteMany({ where: { ticketId: { notIn: seedTicketIds } } });
+  await prisma.ticket.deleteMany({ where: { id: { notIn: seedTicketIds } } });
+
   const ticketMap: Record<string, string> = {};
   for (const t of TICKETS) {
     const mappedCatName = CATEGORIES.find((c) => c.id === t.categoryId)?.name;
@@ -306,6 +475,10 @@ async function main() {
           currentStatus: t.currentStatus,
           requesterId: reqId,
           ownerId: ownId,
+    createdAt: (t as any).createdAt ?? undefined,
+          resolvedAt: t.resolvedAt ?? null,
+          closedAt: t.closedAt ?? null,
+          resolutionSummary: t.resolutionSummary ?? null,
         },
       });
       ticketMap[t.id] = updated.id;
@@ -323,6 +496,10 @@ async function main() {
           currentStatus: t.currentStatus,
           requesterId: reqId,
           ownerId: ownId,
+    createdAt: (t as any).createdAt ?? undefined,
+          resolvedAt: t.resolvedAt ?? null,
+          closedAt: t.closedAt ?? null,
+          resolutionSummary: t.resolutionSummary ?? null,
         },
       });
       ticketMap[t.id] = created.id;
@@ -383,7 +560,46 @@ async function main() {
     }
   }
 
-  console.log("Seeded database successfully with categories, related systems, users, tickets, public comments, and internal notes.");
+  // 7. Actions Taken
+  const seedActionIds = ACTIONS_TAKEN.map((a) => a.id);
+  await prisma.actionTaken.deleteMany({ where: { id: { notIn: seedActionIds } } });
+  for (const a of ACTIONS_TAKEN) {
+    const tId = ticketMap[a.ticketId] || a.ticketId;
+    const pId = userMap[a.performerId] || a.performerId;
+
+    const existing = await prisma.actionTaken.findUnique({ where: { id: a.id } });
+    if (existing) {
+      await prisma.actionTaken.update({
+        where: { id: existing.id },
+        data: {
+          ticketId: tId,
+          performerId: pId,
+          actionDateTime: a.actionDateTime,
+          description: a.description,
+          result: a.result,
+          followUpRequired: a.followUpRequired,
+          followUpNote: a.followUpNote,
+          attachmentNotes: a.attachmentNotes,
+        },
+      });
+    } else {
+      await prisma.actionTaken.create({
+        data: {
+          id: a.id,
+          ticketId: tId,
+          performerId: pId,
+          actionDateTime: a.actionDateTime,
+          description: a.description,
+          result: a.result,
+          followUpRequired: a.followUpRequired,
+          followUpNote: a.followUpNote,
+          attachmentNotes: a.attachmentNotes,
+        },
+      });
+    }
+  }
+
+  console.log("Seeded database successfully with categories, related systems, users, tickets, public comments, internal notes, and actions taken.");
 }
 
 main()

@@ -9,6 +9,7 @@ test.describe('E2E IT Staff Ticket Flow (E2E-02, AC-05..11)', () => {
     await page.getByTestId('login-submit-btn').click();
 
     // 2. Queue Discovery & Control Bar Filtering
+    await page.getByTestId('nav-ticket-queue').click();
     await expect(page.getByTestId('queue-search-input')).toBeVisible();
 
     // Filter queue

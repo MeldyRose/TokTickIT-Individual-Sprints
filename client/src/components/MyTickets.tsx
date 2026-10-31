@@ -13,9 +13,16 @@ import { StatusBadge, PriorityBadge } from "./Badge";
 interface MyTicketsProps {
   onCreateTicketClick: () => void;
   onSelectTicket?: (ticketId: string) => void;
+  initialStatusFilter?: string;
+  initialResolvedRange?: string;
 }
 
-export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSelectTicket }) => {
+export const MyTickets: React.FC<MyTicketsProps> = ({
+  onCreateTicketClick,
+  onSelectTicket,
+  initialStatusFilter,
+  initialResolvedRange,
+}) => {
   const { user } = useAuth();
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -28,7 +35,14 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSel
   // Filters and pagination state
   const [search, setSearch] = useState<string>("");
   const [categoryId, setCategoryId] = useState<string>("");
-  const [status, setStatus] = useState<string>("");
+  const [status, setStatus] = useState<string>(initialStatusFilter || "");
+  const [resolvedRange, setResolvedRange] = useState<string>(initialResolvedRange || "");
+
+  useEffect(() => {
+    setStatus(initialStatusFilter || "");
+    setResolvedRange(initialResolvedRange || "");
+    setPage(1);
+  }, [initialStatusFilter, initialResolvedRange]);
   const [relatedSystemId, setRelatedSystemId] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("createdAt");
   const [order, setOrder] = useState<string>("desc");
@@ -52,13 +66,18 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSel
     setLoading(true);
     setError(null);
     try {
+      const isResolved7d = status === "resolved-7d";
+      const apiStatus = isResolved7d ? "" : status;
+      const apiResolvedRange = isResolved7d ? "7d" : (status ? undefined : (resolvedRange || undefined));
+
       const res = await fetchMyTickets({
         page,
         limit: 10,
         search,
         categoryId,
-        status,
+        status: apiStatus || undefined,
         relatedSystemId,
+        resolvedRange: apiResolvedRange || undefined,
         sortBy,
         order,
       });
@@ -74,19 +93,20 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSel
 
   useEffect(() => {
     loadTickets();
-  }, [user, page, search, categoryId, status, relatedSystemId, sortBy, order]);
+  }, [user, page, search, categoryId, status, relatedSystemId, sortBy, order, resolvedRange]);
 
   const handleClearFilters = () => {
     setSearch("");
     setCategoryId("");
     setStatus("");
+    setResolvedRange("");
     setRelatedSystemId("");
     setSortBy("createdAt");
     setOrder("desc");
     setPage(1);
   };
 
-  const isFiltered = search !== "" || categoryId !== "" || status !== "" || relatedSystemId !== "";
+  const isFiltered = search !== "" || categoryId !== "" || status !== "" || relatedSystemId !== "" || resolvedRange !== "";
 
   return (
     <div className="container py-4">
@@ -146,13 +166,19 @@ export const MyTickets: React.FC<MyTicketsProps> = ({ onCreateTicketClick, onSel
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value);
+                if (e.target.value !== "resolved-7d") {
+                  setResolvedRange("");
+                }
                 setPage(1);
-              }}
+                }}
               data-testid="status-filter"
             >
               <option value="">All Statuses</option>
+              <option value="open">Open / Active</option>
               <option value="NEW">New</option>
               <option value="IN_PROGRESS">In Progress</option>
+              <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
+              <option value="resolved-7d">Resolved Recently (Last 7 Days)</option>
               <option value="RESOLVED">Resolved</option>
               <option value="CLOSED">Closed</option>
             </select>
