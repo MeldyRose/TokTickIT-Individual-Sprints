@@ -133,4 +133,66 @@ describe("IT Staff Ticket Queue Component Tests (UI-03, AC-05, AC-18)", () => {
     expect(await screen.findByTestId("no-results-message")).toBeInTheDocument();
     expect(screen.getByTestId("queue-clear-filters-btn")).toBeInTheDocument();
   });
+
+  it("applies initialFilters from dashboard drill-down and queries API accordingly", async () => {
+    const fetchSpy = vi.spyOn(api, "fetchTickets").mockResolvedValue(mockTicketsResponse);
+
+    render(
+      <StaffTicketQueue
+        onSelectTicket={() => {}}
+        initialFilters={{
+          status: "open",
+          priority: "URGENT,HIGH",
+          ownership: "me",
+          resolvedRange: "today",
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "open",
+          priority: "URGENT,HIGH",
+          owner: "me",
+          resolvedRange: "today",
+        })
+      );
+    });
+  });
+
+  it("resets filters when initialFilters becomes undefined (header navigation reset)", async () => {
+    const fetchSpy = vi.spyOn(api, "fetchTickets").mockResolvedValue(mockTicketsResponse);
+
+    const { rerender } = render(
+      <StaffTicketQueue
+        onSelectTicket={() => {}}
+        initialFilters={{
+          status: "WAITING_FOR_REQUESTER",
+          ownership: "unassigned",
+        }}
+      />
+    );
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "WAITING_FOR_REQUESTER",
+          owner: "unassigned",
+        })
+      );
+    });
+
+    // Simulate clicking Header "Ticket Queue" which clears initialFilters
+    rerender(<StaffTicketQueue onSelectTicket={() => {}} initialFilters={undefined} />);
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: undefined,
+          owner: undefined,
+        })
+      );
+    });
+  });
 });

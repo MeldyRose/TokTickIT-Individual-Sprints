@@ -76,6 +76,7 @@ export interface TicketListParams {
   ownerId?: string;
   relatedSystemId?: string;
   system?: string;
+  resolvedRange?: string;
   sortBy?: string;
   order?: string;
   sortOrder?: string;
@@ -245,6 +246,7 @@ export async function fetchTickets(
   if (ownerVal) query.append("owner", ownerVal);
   const sysVal = params.relatedSystemId || params.system;
   if (sysVal) query.append("system", sysVal);
+  if (params.resolvedRange) query.append("resolvedRange", params.resolvedRange);
   if (params.sortBy) query.append("sortBy", params.sortBy);
   const sortOrderVal = params.sortOrder || params.order;
   if (sortOrderVal) query.append("sortOrder", sortOrderVal);

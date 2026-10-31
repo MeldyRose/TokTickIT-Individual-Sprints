@@ -91,6 +91,9 @@ function MainContent() {
         activeTab={activeTab === "ticket-detail" ? "my-tickets" : activeTab}
         onTabChange={(tab) => {
           setSelectedTicketId(null);
+          if (tab === "ticket-queue") {
+            setQueueFilters(undefined);
+          }
           setActiveTab(tab);
         }}
         onChangePasswordClick={() => setShowVoluntaryPasswordModal(true)}

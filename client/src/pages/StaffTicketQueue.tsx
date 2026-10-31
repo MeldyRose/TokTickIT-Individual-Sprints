@@ -16,6 +16,7 @@ export interface QueueInitialFilters {
   priority?: string;
   search?: string;
   categoryId?: string;
+  resolvedRange?: string;
 }
 
 interface StaffTicketQueueProps {
@@ -31,17 +32,27 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
   const [statusFilter, setStatusFilter] = useState<string>(initialFilters?.status || "");
   const [priorityFilter, setPriorityFilter] = useState<string>(initialFilters?.priority || "");
   const [ownerFilter, setOwnerFilter] = useState<string>(initialFilters?.ownership || "all");
+  const [resolvedRange, setResolvedRange] = useState<string>(initialFilters?.resolvedRange || "");
 
   useEffect(() => {
     if (initialFilters) {
-      if (initialFilters.search !== undefined) {
-        setSearchInput(initialFilters.search);
-        setDebouncedSearch(initialFilters.search);
-      }
-      if (initialFilters.categoryId !== undefined) setCategoryId(initialFilters.categoryId);
-      if (initialFilters.status !== undefined) setStatusFilter(initialFilters.status);
-      if (initialFilters.priority !== undefined) setPriorityFilter(initialFilters.priority);
-      if (initialFilters.ownership !== undefined) setOwnerFilter(initialFilters.ownership);
+      setSearchInput(initialFilters.search || "");
+      setDebouncedSearch(initialFilters.search || "");
+      setCategoryId(initialFilters.categoryId || "");
+      setStatusFilter(initialFilters.status || "");
+      setPriorityFilter(initialFilters.priority || "");
+      setOwnerFilter(initialFilters.ownership || "all");
+      setResolvedRange(initialFilters.resolvedRange || "");
+      setPage(1);
+    } else {
+      setSearchInput("");
+      setDebouncedSearch("");
+      setCategoryId("");
+      setStatusFilter("");
+      setPriorityFilter("");
+      setOwnerFilter("all");
+      setResolvedRange("");
+      setSortOption("createdAt-desc");
       setPage(1);
     }
   }, [initialFilters]);
@@ -100,6 +111,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
       status: statusFilter || undefined,
       priority: priorityFilter || undefined,
       owner: ownerFilter === "all" ? undefined : ownerFilter,
+      resolvedRange: resolvedRange || undefined,
       sortBy,
       sortOrder: order,
     })
@@ -126,7 +138,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
     return () => {
       isSubscribed = false;
     };
-  }, [debouncedSearch, categoryId, statusFilter, priorityFilter, ownerFilter, sortOption, page, pageSize]);
+  }, [debouncedSearch, categoryId, statusFilter, priorityFilter, ownerFilter, resolvedRange, sortOption, page, pageSize]);
 
   const handleClearFilters = () => {
     setSearchInput("");
@@ -135,6 +147,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
     setStatusFilter("");
     setPriorityFilter("");
     setOwnerFilter("all");
+    setResolvedRange("");
     setSortOption("createdAt-desc");
     setPage(1);
   };
@@ -230,6 +243,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
                 data-testid="queue-status-select"
               >
                 <option value="">All Statuses</option>
+                <option value="open">Open / Active Backlog</option>
                 <option value="NEW">New</option>
                 <option value="OPEN">Open</option>
                 <option value="IN_PROGRESS">In Progress</option>
@@ -257,6 +271,7 @@ export const StaffTicketQueue: React.FC<StaffTicketQueueProps> = ({ onSelectTick
                 data-testid="queue-priority-select"
               >
                 <option value="">All Priorities</option>
+                <option value="URGENT,HIGH">Urgent & High</option>
                 <option value="LOW">Low</option>
                 <option value="MEDIUM">Medium</option>
                 <option value="HIGH">High</option>

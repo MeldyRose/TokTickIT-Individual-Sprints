@@ -237,6 +237,32 @@ describe("IT Staff & Administrator Dashboard Component Tests (StaffDashboard.tes
       expect(onNavigateToQueue).toHaveBeenCalledWith({ status: "open" });
     });
 
+    it("triggers filtered navigation when clicking Resolved Today card", async () => {
+      mockAuth(staffUser);
+      vi.spyOn(api, "fetchStaffDashboard").mockResolvedValue(mockDashboardData);
+      const onNavigateToQueue = vi.fn();
+
+      render(<StaffDashboard onNavigateToQueue={onNavigateToQueue} />);
+
+      const resolvedTodayCard = await screen.findByTestId("metric-card-resolved-today");
+      fireEvent.click(resolvedTodayCard);
+
+      expect(onNavigateToQueue).toHaveBeenCalledWith({ status: "RESOLVED", resolvedRange: "today" });
+    });
+
+    it("triggers filtered navigation when clicking Avg Resolution Time card", async () => {
+      mockAuth(staffUser);
+      vi.spyOn(api, "fetchStaffDashboard").mockResolvedValue(mockDashboardData);
+      const onNavigateToQueue = vi.fn();
+
+      render(<StaffDashboard onNavigateToQueue={onNavigateToQueue} />);
+
+      const avgResCard = await screen.findByTestId("metric-card-avg-resolution-time");
+      fireEvent.click(avgResCard);
+
+      expect(onNavigateToQueue).toHaveBeenCalledWith({ status: "RESOLVED" });
+    });
+
     it("triggers keyboard navigation with Enter or Space key", async () => {
       mockAuth(staffUser);
       vi.spyOn(api, "fetchStaffDashboard").mockResolvedValue(mockDashboardData);
