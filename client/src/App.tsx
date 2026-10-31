@@ -33,6 +33,12 @@ function getTabFromUrl(): string | null {
   if (path.includes("/staff/dashboard") || hash === "#staff-dashboard") {
     return "staff-dashboard";
   }
+  if (path.includes("/staff/tickets") || hash === "#ticket-queue") {
+    return "ticket-queue";
+  }
+  if (path.includes("/admin/users") || hash === "#user-management") {
+    return "user-management";
+  }
   if (
     path.includes("/requester/dashboard") ||
     path === "/dashboard" ||
@@ -70,16 +76,10 @@ function MainContent() {
     const onLocationChange = () => {
       const urlTab = getTabFromUrl();
       const currentUser = userRef.current;
+      const isStaffOrAdmin = currentUser?.role === "IT_STAFF" || currentUser?.role === "ADMINISTRATOR";
       if (urlTab) {
-        if (
-          (urlTab === "my-tickets" || urlTab === "requester-dashboard") &&
-          currentUser?.role === "IT_STAFF"
-        ) {
+        if (urlTab === "requester-dashboard" && isStaffOrAdmin) {
           setActiveTab("staff-dashboard");
-        } else if (
-          (urlTab === "my-tickets" || urlTab === "requester-dashboard") && currentUser?.role === "ADMINISTRATOR"
-        ) {
-          setActiveTab("user-management");
         } else if (urlTab === "staff-dashboard" && currentUser?.role === "REQUESTER") {
           setActiveTab("requester-dashboard");
         } else {
@@ -117,18 +117,14 @@ function MainContent() {
       }
 
       if (!urlTab) {
-        if (user.role === "ADMINISTRATOR") {
-          setActiveTab("user-management");
-        } else if (user.role === "IT_STAFF") {
+        if (isStaffOrAdmin) {
           setActiveTab("staff-dashboard");
           if (typeof window !== "undefined" && window.history && window.history.replaceState) {
             window.history.replaceState(null, "", "/staff/dashboard");
           }
         }
       } else {
-        if (urlTab === "requester-dashboard" && user.role === "ADMINISTRATOR") {
-          setActiveTab("user-management");
-        } else if (urlTab === "requester-dashboard" && user.role === "IT_STAFF") {
+        if (urlTab === "requester-dashboard" && isStaffOrAdmin) {
           setActiveTab("staff-dashboard");
           if (typeof window !== "undefined" && window.history && window.history.replaceState) {
             window.history.replaceState(null, "", "/staff/dashboard");
@@ -228,6 +224,10 @@ function MainContent() {
               window.history.pushState(null, "", "/staff/dashboard");
             } else if (tab === "my-tickets") {
               window.history.pushState(null, "", "/tickets");
+            } else if (tab === "ticket-queue") {
+              window.history.pushState(null, "", "/staff/tickets");
+            } else if (tab === "user-management") {
+              window.history.pushState(null, "", "/admin/users");
             }
           }
         }}

@@ -90,6 +90,9 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
     await expect(page.getByTestId('authenticated-user-widget')).toBeVisible();
+    if (await page.getByTestId('nav-ticket-queue').isVisible()) {
+      await page.getByTestId('nav-ticket-queue').click();
+    }
     await expect(page.getByTestId('queue-search-input')).toBeVisible();
 
     // 6.1 Staff Queue Desktop View
@@ -247,6 +250,9 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-email-input').fill('admin@toktickit.com');
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
+    if (await page.getByTestId('nav-user-management').isVisible()) {
+      await page.getByTestId('nav-user-management').click();
+    }
     await expect(page.getByTestId('user-management-page')).toBeVisible();
 
     // 8.8 Self-Deactivation Disabled Note / Error Banner
@@ -276,6 +282,9 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-email-input').fill('alex.thompson@toktickit.com');
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
+    if (await page.getByTestId('nav-ticket-queue').isVisible()) {
+      await page.getByTestId('nav-ticket-queue').click();
+    }
     await expect(page.getByTestId('staff-ticket-queue')).toBeVisible();
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '30b-responsive-queue-desktop.png') });
 
@@ -305,10 +314,16 @@ test.describe('Capture Complete Lab 3 Submission Evidence Screenshots', () => {
     await page.getByTestId('login-email-input').fill('alex.thompson@toktickit.com');
     await page.getByTestId('login-password-input').fill('Password123!');
     await page.getByTestId('login-submit-btn').click();
+    if (await page.getByTestId('nav-ticket-queue').isVisible()) {
+      await page.getByTestId('nav-ticket-queue').click();
+    }
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '31b-responsive-queue-tablet.png') });
 
     // 9.3 Mobile Viewports (375px)
     await page.setViewportSize({ width: 375, height: 667 });
+    if (await page.getByTestId('nav-ticket-queue').isVisible()) {
+      await page.getByTestId('nav-ticket-queue').click();
+    }
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '32b-responsive-queue-mobile.png') });
 
     const mobileViewBtn = page.locator('[data-testid^="view-ticket-mobile-"]').first();

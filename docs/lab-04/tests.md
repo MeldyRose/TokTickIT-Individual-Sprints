@@ -44,12 +44,12 @@ The Lab 4 test suite spans nine specialized testing levels:
 | **UI-03** | UI Comp | AC-01..04, FR-01..03 | Actions Taken feed rendering, Create & Edit modal | Chronological timeline, action badges, follow-up flags, opens create/edit modal | `client/tests/lab-04/ActionsTaken.test.tsx` | **PASS** |
 | **UI-04** | UI Comp | AC-06, FR-05 | Requester read-only Actions Taken view | Renders action feed on Requester Detail screen; hides all create/edit action controls | `client/tests/lab-04/ActionsTaken.test.tsx` | **PASS** |
 | **UI-05** | UI Comp | AC-09..11, FR-11..13 | Resolution Gate modal verification checklist | Displays real-time checks; disables submit when prerequisites missing; enables on full criteria | `client/tests/lab-04/TicketWorkflow.test.tsx` | **PASS** |
-| **A11Y-01** | Style/A11y | AC-17 | WCAG AA compliance, focus rings & Zen Green tokens | Validates 2px focus rings (`#006B3C`), ARIA attributes, and color contrast $\ge 4.5:1$ | `e2e/capture-lab4-screenshots.spec.ts` | **PASS** |
-| **RESP-01** | Responsive | AC-17 | Responsive layout adaptations across breakpoints | Desktop grid shifts to 2-column on tablet and 1-column cards on mobile (<768px) | `e2e/capture-lab4-screenshots.spec.ts` | **PASS** |
+| **A11Y-01** | Style/A11y | AC-17 | Visible focus rings & responsive touch target verification | Programmatically asserts 2px outline with `#006B3C` and verified keyboard navigation | `e2e/capture-lab4-screenshots.spec.ts` | **PASS** |
+| **RESP-01** | Responsive | AC-17 | Responsive layout adaptations across breakpoints | Desktop grid shifts to 2-column on tablet and 1-column cards on mobile (<768px); zero horizontal scroll | `e2e/capture-lab4-screenshots.spec.ts` | **PASS** |
 | **E2E-01** | E2E | AC-12..15 | E2E Staff & Requester dashboard discovery and drill-down | Staff & Requester log in $\rightarrow$ view dashboards $\rightarrow$ click metric cards $\rightarrow$ verify filtered queues | `e2e/lab-04/dashboards.spec.ts` | **PASS** |
 | **E2E-02** | E2E | AC-01..07 | E2E Actions Taken lifecycle (Staff create/edit & Requester read) | Staff logs action $\rightarrow$ updates action $\rightarrow$ Requester views action read-only | `e2e/lab-04/actions-taken-flow.spec.ts` | **PASS** |
 | **E2E-03** | E2E | AC-09..11 | E2E Resolution Gate enforcement & resolution workflow | Staff attempts premature resolve (blocked) $\rightarrow$ logs action $\rightarrow$ adds summary $\rightarrow$ resolves | `e2e/lab-04/ticket-resolution.spec.ts` | **PASS** |
-| **E2E-04** | E2E | AC-05, BR-16 | Concurrency stale update collision feedback | OCC rejects stale update with `409 Conflict` (code `STALE_UPDATE`) and renders alert | `client/tests/lab-04/TicketWorkflow.test.tsx` | **PASS** |
+| **UI-06** | UI Int | AC-05, BR-16 | Concurrency stale update collision feedback | OCC rejects stale update with `409 Conflict` (code `STALE_UPDATE`) and renders alert | `client/tests/lab-04/TicketWorkflow.test.tsx`<br>`server/tests/lab-04/ticket-workflow.api.test.ts` | **PASS** |
 
 ---
 
@@ -63,7 +63,7 @@ Every Acceptance Criterion defined in `docs/lab-04/specification.md` is 100% tra
 | **AC-02** | Action Taken missing conditional follow-up note rejected (`400`) | `server/tests/lab-04/actions-taken.api.test.ts`<br>`client/tests/lab-04/ActionsTaken.test.tsx` | `UNIT-02`<br>`API-02`<br>`UI-03` | Validates error response with detail `Follow-up note is required when follow-up is requested`. |
 | **AC-03** | Log Action Taken with `claimTicket: true` assigns ownership | `server/tests/lab-04/actions-taken.api.test.ts`<br>`e2e/lab-04/actions-taken-flow.spec.ts` | `API-03`<br>`E2E-02` | Ticket `ownerId` updates atomically to authenticated staff performer on unassigned tickets. |
 | **AC-04** | IT Staff updates existing Action Taken (`PATCH`) | `server/tests/lab-04/actions-taken.api.test.ts`<br>`client/tests/lab-04/ActionsTaken.test.tsx`<br>`e2e/lab-04/actions-taken-flow.spec.ts` | `API-04`<br>`UI-03`<br>`E2E-02` | `PATCH /api/tickets/:id/actions/:actionId` updates fields while preserving initial `performedById`. |
-| **AC-05** | Optimistic concurrency control rejects stale update (`409 Conflict`) | `server/tests/lab-04/ticket-workflow.api.test.ts`<br>`client/tests/lab-04/TicketWorkflow.test.tsx` | `CONC-01`<br>`E2E-04` | Atomic `updateMany` returns `409 Conflict` (code `STALE_UPDATE`) when `expectedUpdatedAt` is stale. |
+| **AC-05** | Optimistic concurrency control rejects stale update (`409 Conflict`) | `server/tests/lab-04/ticket-workflow.api.test.ts`<br>`client/tests/lab-04/TicketWorkflow.test.tsx` | `CONC-01`<br>`UI-06` | Atomic `updateMany` returns `409 Conflict` (code `STALE_UPDATE`) when `expectedUpdatedAt` is stale. |
 | **AC-06** | Requester views Actions Taken on owned ticket in read-only mode | `server/tests/lab-04/actions-taken.api.test.ts`<br>`client/tests/lab-04/ActionsTaken.test.tsx`<br>`e2e/lab-04/actions-taken-flow.spec.ts` | `API-05`<br>`UI-04`<br>`E2E-02` | Requester sees complete chronological action timeline; create/edit buttons are absent from DOM. |
 | **AC-07** | Requester blocked from action mutations and unowned tickets (`403`) | `server/tests/lab-04/actions-taken.api.test.ts` | `API-06` | Ownership guard rejects access to foreign tickets with `403 Forbidden` without exposing metadata. |
 | **AC-08** | Action performer autonomy & ticket owner preservation | `server/tests/lab-04/actions-taken.api.test.ts`<br>`e2e/lab-04/actions-taken-flow.spec.ts` | `API-07`<br>`E2E-02` | Secondary staff member records action on another's ticket without changing ticket's assigned owner. |
@@ -85,7 +85,7 @@ Every Acceptance Criterion defined in `docs/lab-04/specification.md` is 100% tra
 | Checkpoint | Target Viewport | Screen / Component | Acceptance Expectation | Inspection Result |
 |---|---|---|---|---|
 | **CHK-01** | Desktop ($\ge 992\text{px}$) | `/staff/dashboard` | 7 KPI metric cards render in clean grid; Recent Tickets table displays all columns. | **PASS** (Zero overflow, all columns visible) |
-| **CHK-02** | Desktop ($\ge 992\text{px}$) | `/dashboard` | 3 Requester metric cards render side-by-side with Action Required alert banner. | **PASS** (Banner renders with amber accent) |
+| **CHK-02** | Desktop ($\ge 992\text{px}$) | `/dashboard` | 5 Requester metric cards render side-by-side with Action Required alert banner. | **PASS** (Banner renders with amber accent) |
 | **CHK-03** | Tablet ($768\text{px}-991\text{px}$) | `/staff/dashboard` & `/dashboard` | Metric cards adapt to 2-column layout; Recent Tickets table compresses padding. | **PASS** (No horizontal scroll, fluid adaptation) |
 | **CHK-04** | Mobile ($< 768\text{px}$) | Both Dashboards | Metric cards stack into 1 full-width column; figures scale cleanly without truncation. | **PASS** (Single column vertical stack, $w \le 100\text{vw}$) |
 | **CHK-05** | Mobile ($< 768\text{px}$) | Actions Taken Feed | Action cards wrap content; timestamps, results, and badges align without overflow. | **PASS** (Clean vertical flex layout, no horizontal scroll) |
@@ -115,8 +115,32 @@ Every Acceptance Criterion defined in `docs/lab-04/specification.md` is 100% tra
     - `ticket-resolution.spec.ts`: Full lifecycle from creation $\rightarrow$ in-progress $\rightarrow$ requester problem resolved advisory $\rightarrow$ staff resolution gate enforcement $\rightarrow$ resolution $\rightarrow$ closure.
 - **Responsive & Visual Inspection Suite (Playwright):**
   - Command: `npx playwright test e2e/capture-lab4-screenshots.spec.ts --workers=1`
-  - Results: **3 passed (12.3s)**
-  - Artifacts Generated: 18 high-resolution PNG screenshots stored in `artifacts/lab-04/screenshots/`.
-- **Full System Regression Verification:**
-  - Lab 1, 2, and 3 regression verified: `npx playwright test e2e/lab-03 --workers=1` (**3 passed, 8.3s**).
-  - Total automated tests across project: **324 tests passing with 0 failures**.
+  - Results: **3 passed (14.6s)**
+  - Artifacts Generated: **19 high-resolution PNG screenshots** across all viewports (Desktop, Tablet, Mobile) stored in `artifacts/lab-04/screenshots/`:
+    - **Staff Dashboard (`staff-dashboard/`):**
+      - `01-staff-dashboard-desktop.png`: Full desktop grid (7 KPI metrics, workload, recent tickets).
+      - `02-staff-dashboard-tablet.png`: 2-column tablet layout.
+      - `03-staff-dashboard-mobile.png`: 1-column vertical mobile stack.
+      - `04-staff-dashboard-focus-ring.png`: Accessible `2px solid #006B3C` focus ring on keyboard tab.
+      - `05-staff-dashboard-drilldown-queue.png`: Pre-filtered ticket queue on KPI card click.
+    - **Requester Dashboard (`requester-dashboard/`):**
+      - `01-requester-dashboard-desktop.png`: 5 metric cards and recent activity.
+      - `02-requester-dashboard-tablet.png`: 2-column tablet layout.
+      - `03-requester-dashboard-mobile.png`: 1-column mobile stack.
+      - `04-requester-dashboard-action-required-banner.png`: Amber Action Required alert banner.
+      - `05-requester-dashboard-drilldown-mytickets.png`: Filtered `/tickets` queue on card drill-down.
+    - **Actions Taken & Resolution Gate (`actions-taken/`):**
+      - `01-actions-feed-staff-desktop.png`: Full action timeline feed on desktop.
+      - `01b-actions-feed-staff-tablet.png`: Action timeline feed on tablet (768px-991px).
+      - `01c-actions-feed-staff-mobile.png`: Action timeline feed on mobile (<768px).
+      - `02-actions-feed-requester-readonly.png`: Requester view with hidden mutation controls.
+      - `03-log-action-modal-empty.png`: Initial empty action modal.
+      - `04-log-action-modal-followup-validation.png`: Conditional follow-up note validation.
+      - `05-log-action-modal-populated.png`: Populated action logging form.
+      - `06-resolution-gate-checklist-blocked.png`: Resolution modal checklist with missing criteria.
+      - `07-resolution-gate-checklist-satisfied.png`: Resolution modal checklist with all criteria satisfied.
+- **System Regression Verification:**
+  - Server Unit & API regression across Labs 1 through 4: **191/191 tests passing**.
+  - Client Component regression across Labs 1 through 4: **126/126 tests passing**.
+  - Lab 3 End-to-End regression suite: `npx playwright test e2e/lab-03 --workers=1` (**3/3 passed, 7.9s**), confirming user administration, RBAC, and responsive layout foundations.
+  - Total automated unit/API/component tests: **317 tests passing with 0 failures** + **7 E2E/inspection specs passing**.
