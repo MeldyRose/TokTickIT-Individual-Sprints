@@ -113,78 +113,216 @@
 
 ## 3. Pull Requests I Reviewed for My Partner (@GGital)
 
-### `feat/lab4-specification`
-- **My Comment:** Reviewed partner's specification documentation. The contract thoroughly details the parent-child Actions Taken model, Resolution Gate workflow constraints (HTTP 422 diagnostic array), Optimistic Concurrency Control (HTTP 409 STALE_UPDATE), and dual Operations & Requester Dashboards. Acceptance Criteria (AC-01..18) are completely mapped in `tests.md`. Ready to merge into staging!  
-- **Partner's Response:** Thanks for the review! Merging into lab4-staging now.
+Repository: [GGital/TocktickIT](https://github.com/GGital/TocktickIT)
 
-### `feat/lab4-database-schema-evolution`
-- **My Comment:** Checked out the branch, inspected Prisma schema, and verified migrations and seed script.
-  - `ActionTaken` model created with foreign keys (`ticketId`, `performerId`), indexes, and cascade delete on ticket removal.
-  - `Ticket` model updated with additive resolution columns (`resolvedAt`, `closedAt`, `resolutionSummary`).
-  - Down-migration rollback script (`rollback.sql`) verified and tested.
-  - Seed script populates diverse tickets with 0, 1, and multiple actions idempotently.  
-  Approved and good to merge!  
-- **Partner's Response:** Thanks! Merged.
+| PR | Branch | Review Verdict |
+|:---:|---|---|
+| [91](https://github.com/GGital/TocktickIT/pull/91) | `docs/lab4-spec` | `Approved` |
+| [92](https://github.com/GGital/TocktickIT/pull/92) | `feat/lab4-data-model-migration-seed` | `Approved` |
+| [93](https://github.com/GGital/TocktickIT/pull/93) | `feat/lab4-actions-taken-api` | `Approved` |
+| [94](https://github.com/GGital/TocktickIT/pull/94) | `feat/lab4-ticket-workflow-api` | `Approved` |
+| [95](https://github.com/GGital/TocktickIT/pull/95) | `feat/lab4-dashboard-api` | `Approved` |
+| [96](https://github.com/GGital/TocktickIT/pull/96) | `feat/lab4-actions-taken-ui` | `Approved` |
+| [97](https://github.com/GGital/TocktickIT/pull/97) | `feat/lab4-ticket-workflow-ui` | `Approved` |
+| [98](https://github.com/GGital/TocktickIT/pull/98) | `feat/lab4-dashboards-ui` | `Approved` |
+| [99](https://github.com/GGital/TocktickIT/pull/99) | `feat/lab4-hardening-regression` | `Changes Requested → Approved` |
+| [100](https://github.com/GGital/TocktickIT/pull/100) | `feat/lab4-e2e-responsive-screenshots` | `Approved` |
 
-### `feat/lab4-actions-taken-api`
-- **My Comment:** Approved! Checked backend Actions Taken API implementation:
-  - `POST /api/tickets/:id/actions` validates mandatory description/result and enforces conditional `followUpNote` when `followUpRequired = true`.
-  - `PATCH /api/tickets/:id/actions/:actionId` allows editing with OCC timestamp check.
-  - Action performer is accurately recorded without mutating ticket owner, and `claimTicket: true` assigns ticket to performer on unassigned tickets.
-  - Requester ownership scoping enforced (`403 Forbidden` for non-owners or mutation attempts).  
-- **Partner's Response:** Thanks for verifying the role checks and claim logic.
+---
 
-### `feat/lab4-ticket-workflow-resolution-gate`
-- **My Comment:** Approved!
-  - Transition to `RESOLVED` enforces Resolution Gate: requires $\ge 1$ Action Taken and resolution summary $\ge 10$ characters, returning `422 Unprocessable Entity` with structured diagnostic array when criteria are unmet.
-  - Atomic OCC enforcement via Prisma `updateMany` prevents race conditions and returns `409 Conflict` (code `STALE_UPDATE`) when `expectedUpdatedAt` does not match.
-  - Role-based authorization checked prior to OCC.
-  - Reopening tickets cleanly resets `resolvedAt` and `closedAt` to null.  
-- **Partner's Response:** Verified atomic updateMany behavior and reopened ticket timestamp clearing.
+### [PR #91: docs: completed specifications](https://github.com/GGital/TocktickIT/pull/91) — `docs/lab4-spec`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > LGTM! Everything passes the review.
+  >
+  > I went through all four docs in `docs/lab-04/` and checked the requirements:
+  > - All IDs (FR-01–FR-34, BR-01–BR-84, AC-01–AC-52, A-01–A-21) match up cleanly across the specs.
+  > - Checked `tests.md` §3.1 — all 52 ACs are mapped, and all 157 planned tests are set to `Pending`.
+  > - Decisions 1–5 all make sense and look solid to proceed with.
+  > - Verified it's strictly docs-only with no code/schema changes.
+  >
+  > *(Quick heads up: the PR description says "6 new and 6 changed endpoints", but the spec tables actually list 8 new and 7 changed endpoints including the dashboards. The spec itself is completely accurate, just a tiny typo in the PR body text.)*
+  >
+  > Ready to merge!
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
 
-### `feat/lab4-actions-taken-ui`
-- **My Comment:** Approved!
-  - Actions Taken feed renders chronologically with performer badges, follow-up alerts, and attachment notes.
-  - Action Taken modal handles both creation and edit modes with inline validation feedback.
-  - Requester detail view displays actions in read-only mode, completely hiding action creation and modification controls.
-  - Component test suite passes 100%.  
-- **Partner's Response:** Thanks! Merging now.
+---
 
-### `feat/lab4-ticket-workflow-ui`
-- **My Comment:** Approved!
-  - Status transition modals guide staff through resolution with real-time checklist validation.
-  - Resolution Gate checklist dynamically checks off items as summary is entered ($\ge 10$ chars) and actions exist.
-  - Concurrency conflict banner renders on `409 Conflict`, allowing user to discard changes or refresh.
-  - Permitted status transition matrix correctly governs available buttons.  
-- **Partner's Response:** Updated checklist with dynamic 422 diagnostic mapping.
+### [PR #92: feat: changed db schema for the action](https://github.com/GGital/TocktickIT/pull/92) — `feat/lab4-data-model-migration-seed`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > LGTM! Approved. 🚀 
+  >
+  > Everything here looks solid and aligns with the spec:
+  > - The migration is purely additive, the backfill logic (`version`, `resolvedAt`, `publicActivityAt`) is clean, and the raw-SQL `CHECK` constraints match §7.1.
+  > - Good catch on the Prisma `P3012` behavior with `prisma migrate resolve --rolled-back`. Deleting the history row in `down.sql` is definitely the right practical approach here, and the round-trip test confirms it works as expected.
+  > - Seed mix covers all required cases and stays idempotent.
+  > - Leaving the resolve check in API-71 skipped until PR #82 lands makes total sense since the gate hasn't been implemented yet.
+  >
+  > Nice work, ready to merge into `lab4-staging`!
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
 
-### `feat/lab4-dashboard-api`
-- **My Comment:** Approved!
-  - `GET /api/dashboard/staff` computes all 7 KPI counts (Unassigned, My Assigned, In Progress, Waiting for Requester, High/Urgent, Total Open, Resolved Today) and average resolution time with safe zero division.
-  - `GET /api/dashboard/requester` returns active tickets count, action required count, and recent 5 tickets scoped strictly to authenticated requester.
-  - Queries execute in under 200ms.  
-- **Partner's Response:** Confirmed zero-division safety and sub-200ms aggregations.
+---
 
-### `feat/lab4-staff-dashboard-ui`
-- **My Comment:** Approved!
-  - Operations Dashboard renders 7 interactive KPI metric cards in responsive CSS grid.
-  - Keyboard navigation tab focus rings display distinct `2px solid #006B3C` Zen Green indicator.
-  - Clicking any KPI metric card smoothly navigates to Staff Ticket Queue with pre-filtered parameters.
-  - Recent tickets table provides quick access to operational tickets.  
-- **Partner's Response:** Thanks for the review!
+### [PR #93: completed backend API for recording the work on the Ticket](https://github.com/GGital/TocktickIT/pull/93) — `feat/lab4-actions-taken-api`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > LGTM!
+  >
+  > ### My PR Review: **Approved**
+  >
+  > All requirements from Issue #81 and the Lab 4 specifications have been thoroughly reviewed:
+  > - **Validation Order & Feedback:** Fully aligns with `api-spec.md` §3.3 – §3.6, with all validation errors returned in a single `400 VALIDATION_FAILED` response.
+  > - **Idempotency & Concurrency:** Robust handling of `clientRequestId` (including concurrent `P2002` deduplication) and optimistic concurrency on `version` (`409 STALE_ACTION`).
+  > - **Authorization & Data Protection:** Staff routes under `/api/staff` refuse Requesters before ticket lookups (BR-72); handler-level checks restrict edits/voids to performer, owner, or admin (BR-18).
+  > - **Projections:** Requester projection cleanly filters out voided actions and strictly exposes the documented §2.2 shape without internal IDs or audit fields.
+  > - **Out-of-Scope Changes:** The updates to `src/messages.ts` to maintain `publicActivityAt` on Public Comments and the "appears resolved" flag are compliant with BR-45 and appropriate to include here for API-25.
+  >
+  > No fixes needed. Excellent work!
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
 
-### `feat/lab4-requester-dashboard-ui`
-- **My Comment:** Approved!
-  - Requester Dashboard provides clear overview of personal support requests with 5 metric cards.
-  - Amber alert banner highlights tickets in `WAITING_FOR_REQUESTER` status requiring requester feedback.
-  - One-click navigation drills down into My Tickets with query filters preserved.
-  - Fully responsive across desktop, tablet, and mobile viewports.  
-- **Partner's Response:** Fixed filter lifecycle persistence and URL query state.
+---
 
-### `feat/lab4-e2e-inspection`
-- **My Comment:** Approved!
-  - All Playwright E2E test suites (`e2e/lab-04/`) pass 100%.
-  - Screenshot evidence generated across desktop, tablet, and mobile breakpoints with verified zero horizontal scroll.
-  - Full regression verification confirms 100% pass across all unit, integration, and E2E suites for Labs 1 through 4.
-  - Ready for final release to `main`!  
-- **Partner's Response:** Thanks! Merging now.
+### [PR #94: Backend for the Requester and IT Staff dashboards](https://github.com/GGital/TocktickIT/pull/94) — `feat/lab4-ticket-workflow-api`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > Looks great to me! Pulled the branch and ran the test suite locally—everything is green.
+  >
+  > A few quick thoughts on your checklist:
+  > - Totally fine with updating Lab 3 `UNIT-09` instead of deleting it. With the new resolution gate and BR-33, adjusting the assertion makes complete sense.
+  > - The validation order and the optimistic concurrency checks (no row locking) look really clean.
+  > - Merging ahead of #85 is fine by me even if the staff UI breaks temporarily until the frontend PR lands.
+  >
+  > Approved! 👍
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
+
+---
+
+### [PR #95: Backend for the Requester and IT Staff dashboards](https://github.com/GGital/TocktickIT/pull/95) — `feat/lab4-dashboard-api`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > LGTM! Approved 👍
+  >
+  > Really clean implementation—everything matches the spec and the tests look great.
+  >
+  > Quick thoughts on what you flagged:
+  > - **`requesterFlagged` link:** Good catch adding the active statuses. Keeping the count reconciled with `meta.totalItems` is definitely the right move here so cancelled tickets don't mess up the list.
+  > - **Lab 2/3 test updates:** Makes total sense. `CLOSED` is valid now, and updating the queue summary shape for `outstandingFollowUps` is expected.
+  > - Scoping to `requesterId`, role guards (403s), and the shared `followUpTickets` logic all look solid.
+  >
+  > Ready to merge into `lab4-staging`! 🚀
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
+
+---
+
+### [PR #96: Adds the Actions Taken panel to the IT Staff Ticket Detail screen](https://github.com/GGital/TocktickIT/pull/96) — `feat/lab4-actions-taken-ui`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > ## LGTM / Approved :shipit:  
+  >
+  > Looks great! Everything from Issue #84 and the spec is covered cleanly, and no fixes are needed.
+  >
+  > ### Key checks:
+  > - **Form & Idempotency:** Conditional follow-up note shows only on "Yes", keeps state, and is omitted on "No" (AC-39). Double-click guard is in place, and retries reuse `clientRequestId` without clearing inputs on error (AC-45, AC-46).
+  > - **Concurrency & Permissions:** `StaleCallout` shows the latest values without wiping user edits (AC-11). The row menu strictly respects API flags (`canEdit`, `followUpOutstanding`), and voiding requires a reason (AC-10, AC-14).
+  > - **Views & A11Y:** Non-actionable tickets show the correct reason text (AC-06). Requester detail is properly read-only (AC-16). Dialog focus trapping/return and row menu keyboard controls work smoothly (AC-51).
+  > - **Styling:** Follows the Zen Green tokens strictly with zero color literals added (AC-50).
+  >
+  > ### Verification:
+  > - Tests: 286/286 passed (`npm test` including UNIT-12/13, UI-10–21, A11Y-02–04).
+  > - Build & Lint: `tsc -b && vite build` built cleanly; 0 lint errors.
+  >
+  > Ready to merge into `lab4-staging`!
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
+
+---
+
+### [PR #97: Updates the Staff Ticket Detail workflow panel so it offers only perm…](https://github.com/GGital/TocktickIT/pull/97) — `feat/lab4-ticket-workflow-ui`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > Great work on this! Everything scoped in the issue is covered and hits the acceptance criteria cleanly:
+  >
+  > - The status select relies strictly on `allowedTransitions` with the current status disabled.
+  > - The blockers callout, `#actions` anchor, `aria-describedby`, and save-time `409 RESOLUTION_BLOCKED` reset work as expected.
+  > - `expectedVersion` is sent across status, owner, and priority changes, with solid stale ticket handling ("You tried: …").
+  > - Reactive refresh without a reload and the Requester "Resolved on" display are in place, with UI-22–UI-27 all passing.
+  >
+  > A couple of quick notes from your checklist:
+  >
+  > 1. **Lab 3 test updates:** Approved—updating the fixtures and request bodies for `expectedVersion` makes complete sense with BR-78.
+  > 2. **Blockers callout a11y:** Good callout on `role="alert"`. To avoid screen readers aggressively interrupting right on page load, let's switch the static banner to `role="status"` (or standard descriptive text) and keep `role="alert"` for dynamic save-time rejections.
+  > 3. Panel Heading: Let's keep "Operations". Aligning with "Workflow" from the mockup isn't worth breaking existing Lab 3 test queries.
+  >
+  > Once that small a11y tweak is in place, this is ready to merge!
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
+
+---
+
+### [PR #98: Finished Dashboard UI](https://github.com/GGital/TocktickIT/pull/98) — `feat/lab4-dashboards-ui`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > Looks great! I went through the changes and rechecked everything against the spec and tests:
+  >
+  > - **Dashboards & Navigation:** Landing on the role's dashboard after login (BR-79) and keeping Dashboard first in navigation works seamlessly. Parent active highlighting on detail routes (`aria-current="page"`) is also spot on.
+  > - **Drill-downs & URL Sync:** The drill-down integration is really clean. The 8 status chips on My Tickets, the Queue follow-up select, and the dismissible "Showing: …" banner all sync up nicely with the URL params.
+  > - **States & Error Handling:** Verified the all-zero welcome card, loading skeletons, and the safe error callout with "Try again" (glad the shell stays interactive on failure).
+  > - **Outside changes:** Updating the Lab 3 test assertions makes total sense due to the new home route, and sticking to the spec for `.zen-metric-attention` over the hook warning was the right call.
+  > - **Tests & Build:** Full client suite is green (324/324 passing), build succeeds, and no new lint warnings.
+  >
+  > Just a quick heads-up on the tablet layout: don't forget to have that 3rd card on the Requester dashboard span across both columns (`ui-spec.md` §4.2) when you work on the responsive screenshots in #88.
+  >
+  > Nice work, ready to merge into `lab4-staging`!
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
+
+---
+
+### [PR #99: Product polish across the whole application: consistent feedback stat…](https://github.com/GGital/TocktickIT/pull/99) — `feat/lab4-hardening-regression`
+- **Initial Verdict:** `Changes Requested`
+- **My Comment (@MeldyRose):**
+  > Solid PR overall! The scope is well covered:
+  > - The health probe (`GET /api/health`, BR-84) handles the 2s timeout cleanly and hides internal details on 503.
+  > - `formatBangkok` replaces all fragmented date helpers consistently.
+  > - Double-submit guards (`inFlight` ref) and form persistence on errors are working properly.
+  > - **Reviewer decisions approved:** The Lab 1 health test update (`database: "ok"`), the `invalid-transition` screenshot showing the stale ticket callout (BR-28), and the `recordAction` E2E helper (BR-35) all make sense given the Lab 4 contracts.
+  >
+  > ### Issues to fix before merge
+  >
+  > Running `cd client && npm test` fails with exit code 1 under full suite load due to two issues:
+  >
+  > 1. **Test timeout in `Hardening.test.tsx` (`Create Ticket`)**  
+  >    Simulating keystrokes with `userEvent.type` for the summary and description easily exceeds Vitest's default 5000 ms timeout when all 32 test files run together (~5037 ms).  
+  >
+  > 2. **Unhandled rejection in `ShellNavigation.test.tsx`**  
+  >    The test for `/staff/tickets/41` fetches from the API, but the mocked fetch returns `[]` because `/api/staff/tickets/41` isn't in the route map. `StaffTicketDetail` treats the truthy array as loaded, passing `undefined` priority to `PriorityBadge` and throwing an uncaught `TypeError: Cannot read properties of undefined (reading 'toLowerCase')`.  
+  >
+  > Once those client test fixes are in and `npm test` runs green from end to end, this is ready to approve!
+- **Partner's Response (@GGital):**
+  > Fixed both. ShellNavigation’s fetch stub now answers unknown routes with 404, like stubApi, so the staff detail no longer gets a fake [] ticket. Hardening fills fields with fireEvent.change. A full run then showed the same 5 s timeout in 7 older tests that type key by key, so I raised testTimeout to 15 s and Testing Library’s asyncUtilTimeout to 5 s instead of rewriting them. npm test was green three runs in a row, exit 0. 😄
+- **Final Verdict:** `Approved`
+- **My Final Comment (@MeldyRose):**
+  > ### Review: Approved ✅
+  >
+  > The fixes in `272afc9` are **100% verified and correct**:
+  >
+  > 1. **`ShellNavigation.test.tsx`**: Unmocked paths now correctly return a `404` (`apiError(404, 'NOT_MOCKED', path)`) instead of a `200 []`. This prevents `StaffTicketDetail` from treating `[]` as a ticket object and completely resolves the unhandled `TypeError` in `PriorityBadge`.
+  > 2. **`Hardening.test.tsx`**: Using `fill()` via `fireEvent.change` eliminates the slow key-by-key typing bottleneck during double-submit testing.
+  > 3. **Timeouts in `setup.ts` & `vite.config.ts`**: Bumping `testTimeout` to 15 s and `asyncUtilTimeout` to 5 s is the right, pragmatic way to handle parallel jsdom load without having to rewrite older test suites.
+  >
+  > Everything in scope (health probe, timestamp formatting, double-submit guards, form preservation, clean cleanup, and the regression suites) is in place.
+  >
+  > LGTM — ready to merge into `lab4-staging`! 🎉
+
+---
+
+### [PR #100: Feat/lab4 e2e responsive screenshots](https://github.com/GGital/TocktickIT/pull/100) — `feat/lab4-e2e-responsive-screenshots`
+- **Review Verdict:** `Approved`
+- **My Comment (@MeldyRose):**
+  > Rechecked the full PR against the Issue, `tests.md`, and `ui-spec.md` §14:
+  >
+  > - **E2E & Responsive**: All flows (E2E-01 to E2E-14) and responsive checks (RESP-01 to RESP-05) cover every AC across all three viewports without horizontal scroll.
+  > - **Screenshots (§14)**: Verified all 33 states across `staff-dashboard`, `requester-dashboard`, `actions-taken`, and `ticket-workflow`. Exactly 97 PNGs accounted for, including the desktop-only `greyscale` exception.
+  > - **Bug Fixes**: The fixes for `defaultActionAt` minute rounding, dialog focus return, and mobile modal CSS are clean and have targeted tests.
+  > - **Regressions**: Lab 2 and Lab 3 suites continue to pass cleanly (147 total green).
+  >
+  > LGTM! Ready to merge into `lab4-staging`. :shipit:
+- **Partner's Response (@GGital):** Merged into `lab4-staging`.
