@@ -4,13 +4,12 @@ import {
   fetchMyTickets,
   RequesterDashboardResponse,
   RequesterDashboardRecentTicket,
-  TicketStatus,
 } from "../api";
 import { StatusBadge } from "../components/Badge";
 import { useAuth } from "../context/AuthContext";
 
 export interface RequesterDashboardProps {
-  onNavigateToTickets?: (status?: string) => void;
+  onNavigateToTickets?: (status?: string, resolvedRange?: string) => void;
   onSelectTicket?: (ticketId: string) => void;
   onCreateTicket?: () => void;
 }
@@ -23,6 +22,7 @@ interface RequesterMetricCardConfig {
   subtitle: string;
   accentColor: string;
   statusFilter?: string;
+  resolvedRange?: string;
 }
 
 export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
@@ -35,10 +35,9 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Status-specific counts for complete issue criteria coverage
+  // Status-specific counts for In Progress and Closed
   const [inProgressCount, setInProgressCount] = useState<number>(0);
   const [closedCount, setClosedCount] = useState<number>(0);
-  const [resolvedTotalCount, setResolvedTotalCount] = useState<number>(0);
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -47,12 +46,11 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
       const response = await fetchRequesterDashboard();
       setData(response);
 
-      // Fetch precise status counts for In Progress, Closed, and Resolved
+      // Fetch precise status counts for In Progress and Closed if not provided in response
       try {
-        const [inProgressRes, closedRes, resolvedRes] = await Promise.allSettled([
+        const [inProgressRes, closedRes] = await Promise.allSettled([
           fetchMyTickets({ limit: 1, status: "IN_PROGRESS" }),
           fetchMyTickets({ limit: 1, status: "CLOSED" }),
-          fetchMyTickets({ limit: 1, status: "RESOLVED" }),
         ]);
 
         if (inProgressRes.status === "fulfilled") {
@@ -66,19 +64,9 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
         } else if (response.metrics.closed !== undefined) {
           setClosedCount(response.metrics.closed);
         }
-
-        if (resolvedRes.status === "fulfilled") {
-          setResolvedTotalCount(resolvedRes.value.pagination.totalItems);
-        } else {
-          setResolvedTotalCount(
-            response.metrics.recentlyResolved ?? response.metrics.resolvedRecently ?? 0
-          );
-        }
       } catch {
-        // Fallbacks from response metrics if individual queries fail
         if (response.metrics.inProgress !== undefined) setInProgressCount(response.metrics.inProgress);
         if (response.metrics.closed !== undefined) setClosedCount(response.metrics.closed);
-        setResolvedTotalCount(response.metrics.recentlyResolved ?? response.metrics.resolvedRecently ?? 0);
       }
     } catch (err: any) {
       setError(err?.message || "Failed to load requester dashboard metrics. Please try again.");
@@ -91,9 +79,9 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
     loadDashboard();
   }, [loadDashboard]);
 
-  const handleCardClick = (statusFilter?: string) => {
+  const handleCardClick = (statusFilter?: string, resolvedRange?: string) => {
     if (onNavigateToTickets) {
-      onNavigateToTickets(statusFilter);
+      onNavigateToTickets(statusFilter, resolvedRange);
     }
   };
 
@@ -115,6 +103,9 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
 
   const waitingCount =
     data?.metrics.waitingForMyInput ?? data?.metrics.waitingForRequester ?? 0;
+
+  const resolvedRecentlyCount =
+    data?.metrics.resolvedRecently ?? data?.metrics.recentlyResolved ?? 0;
 
   const metricCards: RequesterMetricCardConfig[] = [
     {
@@ -147,14 +138,12 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
     {
       id: "resolved",
       testId: "metric-card-resolved",
-      label: "Resolved",
-      value:
-        data?.metrics.resolvedRecently !== undefined && data.metrics.resolvedRecently > 0
-          ? data.metrics.resolvedRecently
-          : resolvedTotalCount,
-      subtitle: "Remediated requests",
+      label: "Resolved Recently",
+      value: resolvedRecentlyCount,
+      subtitle: "Tickets resolved in the last 7 days",
       accentColor: "#2E7D32", // Forest Green
-      statusFilter: "RESOLVED",
+      statusFilter: "resolved-7d",
+      resolvedRange: "7d",
     },
     {
       id: "closed",
@@ -169,6 +158,8 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
 
   const recentTickets: RequesterDashboardRecentTicket[] =
     data?.recentTickets || data?.recentActivity || [];
+
+  const firstWaitingTicket = recentTickets.find((t) => t.actionRequired);
 
   return (
     <div
@@ -243,15 +234,27 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
               . Please review ticket details to provide the requested information.
             </div>
           </div>
-          <button
-            type="button"
-            className="btn btn-sm text-white fw-semibold shadow-sm my-1"
-            style={{ backgroundColor: "#ED6C02", borderColor: "#ED6C02" }}
-            onClick={() => handleCardClick("WAITING_FOR_REQUESTER")}
-            data-testid="banner-view-waiting-tickets"
-          >
-            View Waiting Tickets →
-          </button>
+          <div className="d-flex align-items-center gap-2 my-1 flex-wrap">
+            {firstWaitingTicket && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-dark fw-semibold shadow-sm"
+                onClick={() => onSelectTicket?.(firstWaitingTicket.id)}
+                data-testid="banner-review-ticket-btn"
+              >
+                Review Ticket #{firstWaitingTicket.ticketNumber} →
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-sm text-white fw-semibold shadow-sm"
+              style={{ backgroundColor: "#ED6C02", borderColor: "#ED6C02" }}
+              onClick={() => handleCardClick("WAITING_FOR_REQUESTER")}
+              data-testid="banner-view-waiting-tickets"
+            >
+              View Waiting Tickets →
+            </button>
+          </div>
         </div>
       )}
 
@@ -344,11 +347,11 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
                     outline: "none",
                     padding: "16px 20px",
                   }}
-                  onClick={() => handleCardClick(card.statusFilter)}
+                  onClick={() => handleCardClick(card.statusFilter, card.resolvedRange)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      handleCardClick(card.statusFilter);
+                      handleCardClick(card.statusFilter, card.resolvedRange);
                     }
                   }}
                   data-testid={card.testId}
@@ -434,67 +437,115 @@ export const RequesterDashboard: React.FC<RequesterDashboardProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <div className="table-responsive">
-                      <table
-                        className="table table-hover align-middle mb-0"
-                        data-testid="requester-recent-tickets-table"
-                      >
-                        <thead className="table-light" style={{ fontSize: "0.8rem", color: "#5A625E" }}>
-                          <tr>
-                            <th scope="col" className="ps-4">Ticket No.</th>
-                            <th scope="col">Summary</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">Last Updated</th>
-                            <th scope="col" className="text-end pe-4">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {recentTickets.map((ticket) => (
-                            <tr
-                              key={ticket.id}
-                              style={{ cursor: "pointer" }}
-                              onClick={() => onSelectTicket?.(ticket.id)}
-                              data-testid={`recent-ticket-row-${ticket.id}`}
-                            >
-                              <td className="ps-4 fw-bold font-monospace text-primary">
-                                {ticket.ticketNumber}
-                              </td>
-                              <td style={{ maxWidth: 320 }}>
-                                <div className="text-truncate fw-medium" title={ticket.summary}>
-                                  {ticket.summary}
-                                </div>
-                                {ticket.actionRequired && (
-                                  <span
-                                    className="badge bg-warning text-dark mt-1"
-                                    style={{ fontSize: "0.7rem" }}
-                                    data-testid="ticket-action-required-badge"
-                                  >
-                                    ⚠️ Action Required
-                                  </span>
-                                )}
-                              </td>
-                              <td>
-                                <StatusBadge status={ticket.currentStatus} />
-                              </td>
-                              <td className="small text-muted">{formatDate(ticket.updatedAt)}</td>
-                              <td className="text-end pe-4">
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-success fw-semibold"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onSelectTicket?.(ticket.id);
-                                  }}
-                                  data-testid={`view-ticket-${ticket.id}`}
-                                >
-                                  View Details
-                                </button>
-                              </td>
+                    <>
+                      {/* Desktop Table View (>= 768px) */}
+                      <div className="table-responsive d-none d-md-block">
+                        <table
+                          className="table table-hover align-middle mb-0"
+                          data-testid="requester-recent-tickets-table"
+                        >
+                          <thead className="table-light" style={{ fontSize: "0.8rem", color: "#5A625E" }}>
+                            <tr>
+                              <th scope="col" className="ps-4">Ticket No.</th>
+                              <th scope="col">Summary</th>
+                              <th scope="col">Status</th>
+                              <th scope="col">Last Updated</th>
+                              <th scope="col" className="text-end pe-4">Action</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {recentTickets.map((ticket) => (
+                              <tr
+                                key={ticket.id}
+                                style={{ cursor: "pointer" }}
+                                onClick={() => onSelectTicket?.(ticket.id)}
+                                data-testid={`recent-ticket-row-${ticket.id}`}
+                              >
+                                <td className="ps-4 fw-bold font-monospace text-primary">
+                                  {ticket.ticketNumber}
+                                </td>
+                                <td style={{ maxWidth: 320 }}>
+                                  <div className="text-truncate fw-medium" title={ticket.summary}>
+                                    {ticket.summary}
+                                  </div>
+                                  {ticket.actionRequired && (
+                                    <span
+                                      className="badge bg-warning text-dark mt-1"
+                                      style={{ fontSize: "0.7rem" }}
+                                      data-testid="ticket-action-required-badge"
+                                    >
+                                      ⚠️ Action Required
+                                    </span>
+                                  )}
+                                </td>
+                                <td>
+                                  <StatusBadge status={ticket.currentStatus} />
+                                </td>
+                                <td className="small text-muted">{formatDate(ticket.updatedAt)}</td>
+                                <td className="text-end pe-4">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-success fw-semibold"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onSelectTicket?.(ticket.id);
+                                    }}
+                                    data-testid={`view-ticket-${ticket.id}`}
+                                  >
+                                    View Details
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Stacked Card View (< 768px) to prevent horizontal scrolling (ui-spec 5.1) */}
+                      <div className="d-md-none p-3 d-flex flex-column gap-2" data-testid="mobile-recent-tickets-cards">
+                        {recentTickets.map((ticket) => (
+                          <div
+                            key={ticket.id}
+                            className="card border shadow-sm p-3"
+                            style={{ borderRadius: 8, cursor: "pointer", backgroundColor: "#FFFFFF" }}
+                            onClick={() => onSelectTicket?.(ticket.id)}
+                            data-testid={`mobile-recent-ticket-card-${ticket.id}`}
+                          >
+                            <div className="d-flex justify-content-between align-items-center mb-1">
+                              <span className="fw-bold font-monospace text-primary small">
+                                {ticket.ticketNumber}
+                              </span>
+                              <StatusBadge status={ticket.currentStatus} />
+                            </div>
+                            <div className="fw-medium text-dark mb-1">{ticket.summary}</div>
+                            {ticket.actionRequired && (
+                              <div className="mb-2">
+                                <span
+                                  className="badge bg-warning text-dark"
+                                  style={{ fontSize: "0.7rem" }}
+                                  data-testid="ticket-action-required-badge"
+                                >
+                                  ⚠️ Action Required
+                                </span>
+                              </div>
+                            )}
+                            <div className="d-flex justify-content-between align-items-center pt-2 border-top mt-1">
+                              <span className="small text-muted">{formatDate(ticket.updatedAt)}</span>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-success fw-semibold"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSelectTicket?.(ticket.id);
+                                }}
+                              >
+                                View Details
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>

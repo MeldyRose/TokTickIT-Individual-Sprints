@@ -274,6 +274,7 @@ export async function fetchMyTickets(
     categoryId?: string;
     status?: string;
     relatedSystemId?: string;
+    resolvedRange?: string;
     sortBy?: string;
     order?: string;
   },

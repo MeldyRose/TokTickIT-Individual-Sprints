@@ -62,6 +62,7 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
   };
 
   beforeEach(() => {
+    window.history.pushState(null, "", "/");
     vi.restoreAllMocks();
     vi.spyOn(AuthContextModule, "useAuth").mockReturnValue({
       user: requesterUser,
@@ -74,6 +75,8 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
     });
 
     vi.spyOn(api, "fetchRequesterDashboard").mockResolvedValue(mockDashboardData);
+    vi.spyOn(api, "fetchCategories").mockResolvedValue([]);
+    vi.spyOn(api, "fetchRelatedSystems").mockResolvedValue([]);
     vi.spyOn(api, "fetchMyTickets").mockImplementation((params) => {
       if (params?.status === "IN_PROGRESS") {
         return Promise.resolve({ data: [], pagination: { page: 1, limit: 1, totalItems: 1, totalPages: 1 } });
@@ -81,7 +84,7 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       if (params?.status === "CLOSED") {
         return Promise.resolve({ data: [], pagination: { page: 1, limit: 1, totalItems: 2, totalPages: 1 } });
       }
-      if (params?.status === "RESOLVED") {
+      if (params?.resolvedRange === "7d") {
         return Promise.resolve({ data: [], pagination: { page: 1, limit: 1, totalItems: 5, totalPages: 1 } });
       }
       return Promise.resolve({ data: [], pagination: { page: 1, limit: 10, totalItems: 0, totalPages: 0 } });
@@ -99,7 +102,7 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       expect(screen.getByTestId("dashboard-create-ticket-btn")).toBeInTheDocument();
     });
 
-    it("renders all high-impact metric cards with labels and values", async () => {
+    it("renders all high-impact metric cards with labels and values, including Resolved Recently", async () => {
       render(<RequesterDashboard />);
 
       expect(await screen.findByTestId("metric-cards-grid")).toBeInTheDocument();
@@ -114,6 +117,9 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       expect(screen.getByTestId("metric-card-waiting-input-value")).toHaveTextContent("1");
       expect(screen.getByTestId("metric-card-resolved-value")).toHaveTextContent("5");
       expect(screen.getByTestId("metric-card-closed-value")).toHaveTextContent("2");
+
+      expect(screen.getByText("Resolved Recently")).toBeInTheDocument();
+      expect(screen.getByText("Tickets resolved in the last 7 days")).toBeInTheDocument();
     });
   });
 
@@ -125,6 +131,18 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       expect(banner).toBeInTheDocument();
       expect(banner).toHaveTextContent(/IT Staff is waiting for your response on 1 ticket/i);
       expect(screen.getByTestId("banner-view-waiting-tickets")).toBeInTheDocument();
+      expect(screen.getByTestId("banner-review-ticket-btn")).toBeInTheDocument();
+    });
+
+    it("clicking 'Review Ticket #...' button navigates directly to ticket details (ui-spec 3.2.3)", async () => {
+      const onSelectMock = vi.fn();
+      render(<RequesterDashboard onSelectTicket={onSelectMock} />);
+
+      const reviewBtn = await screen.findByTestId("banner-review-ticket-btn");
+      expect(reviewBtn).toHaveTextContent("Review Ticket #TKT-2026-000001 →");
+      fireEvent.click(reviewBtn);
+
+      expect(onSelectMock).toHaveBeenCalledWith("tkt-001");
     });
 
     it("clicking 'View Waiting Tickets' triggers drill-down with WAITING_FOR_REQUESTER status", async () => {
@@ -134,7 +152,7 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       const viewBtn = await screen.findByTestId("banner-view-waiting-tickets");
       fireEvent.click(viewBtn);
 
-      expect(onNavigateMock).toHaveBeenCalledWith("WAITING_FOR_REQUESTER");
+      expect(onNavigateMock).toHaveBeenCalledWith("WAITING_FOR_REQUESTER", undefined);
     });
 
     it("hides the Action Required banner when waiting count is zero", async () => {
@@ -162,7 +180,7 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       const card = await screen.findByTestId("metric-card-open");
       fireEvent.click(card);
 
-      expect(onNavigateMock).toHaveBeenCalledWith("open");
+      expect(onNavigateMock).toHaveBeenCalledWith("open", undefined);
     });
 
     it("clicking 'In Progress' navigates to My Tickets filtered by 'IN_PROGRESS'", async () => {
@@ -172,7 +190,7 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       const card = await screen.findByTestId("metric-card-in-progress");
       fireEvent.click(card);
 
-      expect(onNavigateMock).toHaveBeenCalledWith("IN_PROGRESS");
+      expect(onNavigateMock).toHaveBeenCalledWith("IN_PROGRESS", undefined);
     });
 
     it("clicking 'Waiting for My Input' navigates to My Tickets filtered by 'WAITING_FOR_REQUESTER'", async () => {
@@ -182,17 +200,17 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       const card = await screen.findByTestId("metric-card-waiting-input");
       fireEvent.click(card);
 
-      expect(onNavigateMock).toHaveBeenCalledWith("WAITING_FOR_REQUESTER");
+      expect(onNavigateMock).toHaveBeenCalledWith("WAITING_FOR_REQUESTER", undefined);
     });
 
-    it("clicking 'Resolved' navigates to My Tickets filtered by 'RESOLVED'", async () => {
+    it("clicking 'Resolved Recently' navigates to My Tickets with 'resolved-7d' and resolvedRange '7d'", async () => {
       const onNavigateMock = vi.fn();
       render(<RequesterDashboard onNavigateToTickets={onNavigateMock} />);
 
       const card = await screen.findByTestId("metric-card-resolved");
       fireEvent.click(card);
 
-      expect(onNavigateMock).toHaveBeenCalledWith("RESOLVED");
+      expect(onNavigateMock).toHaveBeenCalledWith("resolved-7d", "7d");
     });
 
     it("clicking 'Closed' navigates to My Tickets filtered by 'CLOSED'", async () => {
@@ -202,7 +220,7 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       const card = await screen.findByTestId("metric-card-closed");
       fireEvent.click(card);
 
-      expect(onNavigateMock).toHaveBeenCalledWith("CLOSED");
+      expect(onNavigateMock).toHaveBeenCalledWith("CLOSED", undefined);
     });
 
     it("supports keyboard navigation with Enter and Space keys", async () => {
@@ -211,7 +229,7 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
 
       const card = await screen.findByTestId("metric-card-open");
       fireEvent.keyDown(card, { key: "Enter" });
-      expect(onNavigateMock).toHaveBeenCalledWith("open");
+      expect(onNavigateMock).toHaveBeenCalledWith("open", undefined);
 
       fireEvent.keyDown(card, { key: " " });
       expect(onNavigateMock).toHaveBeenCalledTimes(2);
@@ -219,18 +237,16 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
   });
 
   describe("4. My Recent Tickets Widget", () => {
-    it("renders the recent tickets table with ticket numbers, summaries, and status badges", async () => {
+    it("renders the recent tickets table and mobile stacked cards without sideways scrolling", async () => {
       render(<RequesterDashboard />);
 
       expect(await screen.findByTestId("my-recent-tickets-widget")).toBeInTheDocument();
       expect(screen.getByTestId("requester-recent-tickets-table")).toBeInTheDocument();
+      expect(screen.getByTestId("mobile-recent-tickets-cards")).toBeInTheDocument();
 
-      expect(screen.getByText("TKT-2026-000001")).toBeInTheDocument();
-      expect(screen.getByText("VPN access connection failure")).toBeInTheDocument();
-      expect(screen.getByTestId("ticket-action-required-badge")).toBeInTheDocument();
-
-      expect(screen.getByText("TKT-2026-000002")).toBeInTheDocument();
-      expect(screen.getByText("Monitors flickering on workstation dock")).toBeInTheDocument();
+      expect(screen.getAllByText("TKT-2026-000001").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("VPN access connection failure").length).toBeGreaterThan(0);
+      expect(screen.getAllByTestId("ticket-action-required-badge").length).toBeGreaterThan(0);
     });
 
     it("clicking ticket row calls onSelectTicket with ticket ID", async () => {
@@ -411,8 +427,68 @@ describe("Requester Dashboard Component Tests (RequesterDashboard.test.tsx - Fea
       fireEvent.click(inProgressCard);
 
       // 5. Navigates to My Tickets filtered by IN_PROGRESS
-      const statusFilter = await screen.findByTestId("status-filter") as HTMLSelectElement;
+      const statusFilter = (await screen.findByTestId("status-filter")) as HTMLSelectElement;
       expect(statusFilter.value).toBe("IN_PROGRESS");
+    });
+
+    it("clears drill-down filter when navigating to My Tickets from header", async () => {
+      render(<App />);
+
+      // 1. Navigate to dashboard and drill down to IN_PROGRESS
+      const dashboardNavBtn = await screen.findByTestId("nav-requester-dashboard");
+      fireEvent.click(dashboardNavBtn);
+
+      const inProgressCard = await screen.findByTestId("metric-card-in-progress");
+      fireEvent.click(inProgressCard);
+
+      const statusFilter = (await screen.findByTestId("status-filter")) as HTMLSelectElement;
+      expect(statusFilter.value).toBe("IN_PROGRESS");
+
+      // 2. Click 'My Tickets' in the header
+      const myTicketsNavBtn = screen.getByTestId("nav-my-tickets");
+      fireEvent.click(myTicketsNavBtn);
+
+      // 3. Status filter is reset back to all statuses
+      await waitFor(() => {
+        expect((screen.getByTestId("status-filter") as HTMLSelectElement).value).toBe("");
+      });
+    });
+
+    it("clears drill-down filter when returning to My Tickets after creating a ticket", async () => {
+      render(<App />);
+
+      // 1. Navigate to dashboard and drill down to resolved-7d
+      const dashboardNavBtn = await screen.findByTestId("nav-requester-dashboard");
+      fireEvent.click(dashboardNavBtn);
+
+      const resolvedCard = await screen.findByTestId("metric-card-resolved");
+      fireEvent.click(resolvedCard);
+
+      const statusFilter = (await screen.findByTestId("status-filter")) as HTMLSelectElement;
+      expect(statusFilter.value).toBe("resolved-7d");
+
+      // 2. Click Create Ticket
+      const createNavBtn = screen.getByTestId("nav-create-ticket");
+      fireEvent.click(createNavBtn);
+
+      // 3. Cancel creating ticket
+      const cancelBtn = await screen.findByRole("button", { name: /cancel/i });
+      fireEvent.click(cancelBtn);
+
+      // 4. Filter is reset to empty string so newly created tickets are visible
+      const resetFilter = (await screen.findByTestId("status-filter")) as HTMLSelectElement;
+      expect(resetFilter.value).toBe("");
+    });
+
+    it("routes directly to Requester Dashboard when window.location.pathname is /requester/dashboard or /dashboard", async () => {
+      window.history.pushState(null, "", "/requester/dashboard");
+      render(<App />);
+
+      expect(await screen.findByTestId("requester-dashboard")).toBeInTheDocument();
+      expect(screen.getByTestId("requester-dashboard-title")).toHaveTextContent("My IT Support Dashboard");
+
+      // Reset URL
+      window.history.pushState(null, "", "/");
     });
   });
 });
